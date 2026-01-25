@@ -154,6 +154,32 @@ function getAllTop10() {
   };
 }
 
+// Calculate total distance for a game mode (sum of all entries' distances)
+function getTotalDistance(gameMode) {
+  const entries = database[gameMode] || [];
+  return entries.reduce((sum, entry) => sum + (entry.distance || 0), 0);
+}
+
+// Get total distances for all game modes
+function getAllTotalDistances() {
+  const rowing = getTotalDistance('rowing');
+  const running = getTotalDistance('running');
+  const cycling = getTotalDistance('cycling');
+  const total = rowing + running + cycling;
+
+  return {
+    rowing: rowing,
+    running: running,
+    cycling: cycling,
+    total: total,
+    // Also provide in km
+    rowingKm: (rowing / 1000).toFixed(2),
+    runningKm: (running / 1000).toFixed(2),
+    cyclingKm: (cycling / 1000).toFixed(2),
+    totalKm: (total / 1000).toFixed(2)
+  };
+}
+
 // ============================================
 // Load Game Configuration
 // ============================================
@@ -558,11 +584,13 @@ function broadcastGameConfig(stationId = null) {
 // ============================================
 function broadcastAllLeaderboards() {
   const allTop10 = getAllTop10();
+  const totalDistances = getAllTotalDistances();
 
   const leaderboardMessage = {
     messageType: 'LEADERBOARD_UPDATE',
     timestamp: Date.now(),
-    leaderboards: allTop10
+    leaderboards: allTop10,
+    totalDistances: totalDistances
   };
 
   // Broadcast combined leaderboard
@@ -574,12 +602,14 @@ function broadcastAllLeaderboards() {
       messageType: 'LEADERBOARD_UPDATE',
       timestamp: Date.now(),
       gameMode: mode,
-      entries: allTop10[mode]
+      entries: allTop10[mode],
+      totalDistance: totalDistances[mode],
+      totalDistanceKm: totalDistances[`${mode}Km`]
     };
     publishResponse(`${TOPICS.LEADERBOARD_BROADCAST}/${mode}`, modeMessage);
   });
 
-  console.log(`[Leaderboard] Broadcasted top 10 for all game modes (rowing: ${allTop10.rowing.length}, running: ${allTop10.running.length}, cycling: ${allTop10.cycling.length})`);
+  console.log(`[Leaderboard] Broadcasted - Total distance: ${totalDistances.totalKm}km (rowing: ${totalDistances.rowingKm}km, running: ${totalDistances.runningKm}km, cycling: ${totalDistances.cyclingKm}km)`);
 }
 
 // ============================================

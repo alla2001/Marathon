@@ -1,0 +1,8 @@
+{
+  "brokerUrl": "mqtt://localhost:1883",
+  "clientId": "leaderboard-server",
+  "username": "",
+  "password": "",
+  "reconnectPeriod": 5000,
+  "clean": true
+}

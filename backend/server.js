@@ -1,7 +1,36 @@
-require('dotenv').config();
 const mqtt = require('mqtt');
 const fs = require('fs');
 const path = require('path');
+
+// ============================================
+// Load MQTT Settings
+// ============================================
+const MQTT_SETTINGS_FILE = path.join(__dirname, 'mqtt-settings.json');
+let mqttSettings = {
+  brokerUrl: 'mqtt://localhost:1883',
+  clientId: 'leaderboard-server',
+  username: '',
+  password: '',
+  reconnectPeriod: 5000,
+  clean: true
+};
+
+function loadMqttSettings() {
+  try {
+    if (fs.existsSync(MQTT_SETTINGS_FILE)) {
+      const data = fs.readFileSync(MQTT_SETTINGS_FILE, 'utf8');
+      mqttSettings = { ...mqttSettings, ...JSON.parse(data) };
+      console.log(`[MQTT Settings] Loaded from mqtt-settings.json`);
+    } else {
+      // Create default settings file
+      fs.writeFileSync(MQTT_SETTINGS_FILE, JSON.stringify(mqttSettings, null, 2), 'utf8');
+      console.log('[MQTT Settings] Created default mqtt-settings.json');
+    }
+  } catch (err) {
+    console.error('[MQTT Settings] Error loading:', err.message);
+  }
+  return mqttSettings;
+}
 
 // ============================================
 // JSON Database Setup (Per Game Mode)
@@ -187,17 +216,17 @@ let mqttClient = null;
 
 function connectMQTT() {
   const options = {
-    clientId: process.env.MQTT_CLIENT_ID || 'leaderboard-server-' + Math.random().toString(16).substr(2, 8),
-    clean: true,
-    reconnectPeriod: 5000
+    clientId: mqttSettings.clientId || 'leaderboard-server-' + Math.random().toString(16).substr(2, 8),
+    clean: mqttSettings.clean !== false,
+    reconnectPeriod: mqttSettings.reconnectPeriod || 5000
   };
 
-  if (process.env.MQTT_USERNAME) {
-    options.username = process.env.MQTT_USERNAME;
-    options.password = process.env.MQTT_PASSWORD;
+  if (mqttSettings.username) {
+    options.username = mqttSettings.username;
+    options.password = mqttSettings.password;
   }
 
-  const brokerUrl = process.env.MQTT_BROKER_URL || 'mqtt://localhost:1883';
+  const brokerUrl = mqttSettings.brokerUrl || 'mqtt://localhost:1883';
   console.log(`[MQTT] Connecting to ${brokerUrl}...`);
 
   mqttClient = mqtt.connect(brokerUrl, options);
@@ -599,6 +628,9 @@ function main() {
   console.log('========================================');
   console.log('  Marathon Leaderboard Server');
   console.log('========================================\n');
+
+  // Load MQTT settings
+  loadMqttSettings();
 
   // Load game configuration
   loadGameConfig();

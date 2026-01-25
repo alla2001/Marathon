@@ -473,11 +473,11 @@ public class MainGameManager : MonoBehaviour
             hudController.HideHUD();
         }
 
-        // Show Game Over screen
+        // Show Game Over screen (pass completed status for win/lose display)
         if (gameOverController != null)
         {
-            gameOverController.ShowGameOver(currentTime, currentDistance);
-            Debug.Log("[MainGameManager] Showing Game Over screen");
+            gameOverController.ShowGameOver(currentTime, currentDistance, completed);
+            Debug.Log($"[MainGameManager] Showing Game Over screen - Won: {completed}");
         }
         else
         {

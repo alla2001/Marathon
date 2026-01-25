@@ -27,6 +27,7 @@
   },
   "broadcast": {
     "onConnect": true,
-    "intervalSeconds": 5
+    "configIntervalSeconds": 5,
+    "leaderboardIntervalSeconds": 6
   }
 }

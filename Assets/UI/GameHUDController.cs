@@ -20,6 +20,8 @@ public class GameHUDController : MonoBehaviour
     private VisualElement progressFill;
     private VisualElement distanceMarkers;
     private VisualElement motivationTextImage;
+    private Label finalCountdownLabel;
+    private VisualElement finalCountdownContainer;
 
     private float currentDistance = 0f;
     private float currentTime = 0f;
@@ -29,6 +31,10 @@ public class GameHUDController : MonoBehaviour
     // Automatic checkpoint tracking (at 1/3, 2/3 of distance)
     private bool[] checkpointsReached = new bool[2]; // 2 checkpoints (33% and 66%)
     private Coroutine hideMotivationCoroutine;
+
+    // Final countdown tracking
+    private int lastDisplayedCountdown = -1;
+    private const int COUNTDOWN_START_SECONDS = 10;
 
     private void OnEnable()
     {
@@ -65,6 +71,26 @@ public class GameHUDController : MonoBehaviour
             motivationTextImage.style.opacity = 0f;
         }
 
+        // Get or create final countdown elements
+        finalCountdownContainer = root.Q<VisualElement>("FinalCountdownContainer");
+        finalCountdownLabel = root.Q<Label>("FinalCountdownLabel");
+
+        // If container doesn't exist, create it dynamically
+        if (finalCountdownContainer == null)
+        {
+            CreateFinalCountdownUI(root);
+        }
+        else if (finalCountdownLabel == null)
+        {
+            finalCountdownLabel = finalCountdownContainer.Q<Label>();
+        }
+
+        // Hide countdown initially
+        if (finalCountdownContainer != null)
+        {
+            finalCountdownContainer.style.display = DisplayStyle.None;
+        }
+
         // Update distance markers based on initial totalDistance
         UpdateDistanceMarkers();
 
@@ -84,6 +110,9 @@ public class GameHUDController : MonoBehaviour
             currentTime += Time.deltaTime;
             timeRemaining = Mathf.Max(0, timeLimit - currentTime);
             UpdateTimeDisplay();
+
+            // Check for final countdown (last 10 seconds)
+            CheckFinalCountdown();
 
             // Check if time expired
             if (timeRemaining <= 0)
@@ -109,6 +138,9 @@ public class GameHUDController : MonoBehaviour
         // Hide motivation image if visible
         HideMotivationImage();
 
+        // Reset final countdown
+        ResetFinalCountdown();
+
         UpdateDistanceDisplay();
         UpdateTimeDisplay();
         UpdateProgressBar();
@@ -121,6 +153,7 @@ public class GameHUDController : MonoBehaviour
     {
         isGameRunning = false;
         HideMotivationImage();
+        HideFinalCountdown();
     }
 
     public void ShowHUD()
@@ -386,5 +419,152 @@ public class GameHUDController : MonoBehaviour
         {
             motivationTextImage.style.display = DisplayStyle.None;
         }).ExecuteLater(300);
+    }
+
+    // ========================================
+    // Final Countdown (Last 10 Seconds)
+    // ========================================
+
+    /// <summary>
+    /// Creates the final countdown UI dynamically if not present in UXML
+    /// </summary>
+    private void CreateFinalCountdownUI(VisualElement root)
+    {
+        finalCountdownContainer = new VisualElement();
+        finalCountdownContainer.name = "FinalCountdownContainer";
+        finalCountdownContainer.style.position = Position.Absolute;
+        finalCountdownContainer.style.left = 0;
+        finalCountdownContainer.style.right = 0;
+        finalCountdownContainer.style.top = 0;
+        finalCountdownContainer.style.bottom = 0;
+        finalCountdownContainer.style.alignItems = Align.Center;
+        finalCountdownContainer.style.justifyContent = Justify.Center;
+        finalCountdownContainer.style.display = DisplayStyle.None;
+
+        finalCountdownLabel = new Label();
+        finalCountdownLabel.name = "FinalCountdownLabel";
+        finalCountdownLabel.style.fontSize = 200;
+        finalCountdownLabel.style.color = new Color(1f, 0.2f, 0.2f, 1f); // Red color
+        finalCountdownLabel.style.unityFontStyleAndWeight = FontStyle.Bold;
+        finalCountdownLabel.style.unityTextOutlineWidth = 3;
+        finalCountdownLabel.style.unityTextOutlineColor = Color.black;
+        finalCountdownLabel.style.textShadow = new TextShadow
+        {
+            offset = new Vector2(4, 4),
+            blurRadius = 8,
+            color = new Color(0, 0, 0, 0.7f)
+        };
+
+        finalCountdownContainer.Add(finalCountdownLabel);
+        root.Add(finalCountdownContainer);
+
+        Debug.Log("[GameHUD] Created final countdown UI dynamically");
+    }
+
+    /// <summary>
+    /// Checks if we should show the final countdown and updates the display
+    /// </summary>
+    private void CheckFinalCountdown()
+    {
+        if (finalCountdownContainer == null || finalCountdownLabel == null)
+            return;
+
+        int secondsLeft = Mathf.CeilToInt(timeRemaining);
+
+        // Show countdown for last 10 seconds
+        if (secondsLeft <= COUNTDOWN_START_SECONDS && secondsLeft > 0)
+        {
+            // Only update when the second changes
+            if (secondsLeft != lastDisplayedCountdown)
+            {
+                lastDisplayedCountdown = secondsLeft;
+                ShowCountdownNumber(secondsLeft);
+            }
+        }
+        else if (secondsLeft <= 0 && lastDisplayedCountdown != 0)
+        {
+            // Hide countdown when time is up
+            lastDisplayedCountdown = 0;
+            HideFinalCountdown();
+        }
+        else if (secondsLeft > COUNTDOWN_START_SECONDS && finalCountdownContainer.style.display == DisplayStyle.Flex)
+        {
+            // Hide if somehow visible but not in countdown range
+            HideFinalCountdown();
+        }
+    }
+
+    /// <summary>
+    /// Shows a countdown number with animation
+    /// </summary>
+    private void ShowCountdownNumber(int number)
+    {
+        if (finalCountdownContainer == null || finalCountdownLabel == null)
+            return;
+
+        // Update the number
+        finalCountdownLabel.text = number.ToString();
+
+        // Make visible
+        finalCountdownContainer.style.display = DisplayStyle.Flex;
+
+        // Color transition: more red as time runs out
+        float urgency = 1f - (number / (float)COUNTDOWN_START_SECONDS);
+        Color countdownColor = Color.Lerp(new Color(1f, 0.8f, 0.2f), new Color(1f, 0.1f, 0.1f), urgency);
+        finalCountdownLabel.style.color = countdownColor;
+
+        // Scale animation: start big, shrink to normal
+        finalCountdownLabel.style.scale = new Scale(new Vector3(1.5f, 1.5f, 1f));
+        finalCountdownLabel.style.opacity = 1f;
+
+        // Set up transition
+        finalCountdownLabel.style.transitionProperty = new StyleList<StylePropertyName>(
+            new System.Collections.Generic.List<StylePropertyName> {
+                new StylePropertyName("scale"),
+                new StylePropertyName("opacity")
+            }
+        );
+        finalCountdownLabel.style.transitionDuration = new StyleList<TimeValue>(
+            new System.Collections.Generic.List<TimeValue> {
+                new TimeValue(0.3f, TimeUnit.Second),
+                new TimeValue(0.7f, TimeUnit.Second)
+            }
+        );
+        finalCountdownLabel.style.transitionTimingFunction = new StyleList<EasingFunction>(
+            new System.Collections.Generic.List<EasingFunction> {
+                new EasingFunction(EasingMode.EaseOutBack),
+                new EasingFunction(EasingMode.EaseIn)
+            }
+        );
+
+        // Animate to normal scale and fade slightly
+        finalCountdownLabel.schedule.Execute(() =>
+        {
+            finalCountdownLabel.style.scale = new Scale(Vector3.one);
+            finalCountdownLabel.style.opacity = 0.8f;
+        }).ExecuteLater(10);
+
+        Debug.Log($"[GameHUD] Final countdown: {number}");
+    }
+
+    /// <summary>
+    /// Hides the final countdown display
+    /// </summary>
+    private void HideFinalCountdown()
+    {
+        if (finalCountdownContainer == null)
+            return;
+
+        finalCountdownContainer.style.display = DisplayStyle.None;
+        lastDisplayedCountdown = -1;
+    }
+
+    /// <summary>
+    /// Resets the final countdown state (call when starting a new game)
+    /// </summary>
+    private void ResetFinalCountdown()
+    {
+        lastDisplayedCountdown = -1;
+        HideFinalCountdown();
     }
 }

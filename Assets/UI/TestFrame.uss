@@ -1,0 +1,41 @@
+/* Test Frame - Figma Export */
+
+/* Root Container - Full portrait tablet screen (1080x1920) */
+.test-frame-root {
+    width: 1080px;
+    height: 1920px;
+    background-color: rgb(51, 49, 47); /* Fallback color from gradient */
+}
+
+/* Background Layer - Bottom layer with image */
+.background-layer {
+    position: absolute;
+    left: -154px;
+    top: 746px;
+    width: 1930px;
+    height: 707px;
+    background-image: url('project://database/Assets/UI/Images/Test Frame/Clip path group.png');
+    -unity-background-scale-mode: scale-to-fit;
+}
+
+/* Arabic Text - Top center */
+.arabic-text {
+    position: absolute;
+    left: 290px;
+    top: 60px;
+    width: 495px;
+    height: 130px;
+    background-image: url('project://database/Assets/UI/Images/Test Frame/Group.png');
+    -unity-background-scale-mode: scale-to-fit;
+}
+
+/* ROWING Text - Center */
+.rowing-text {
+    position: absolute;
+    left: 120px;
+    top: 960px;
+    width: 835px;
+    height: 400px;
+    background-image: url('project://database/Assets/UI/Images/Test Frame/Group 2147203054.png');
+    -unity-background-scale-mode: scale-to-fit;
+}

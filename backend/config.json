@@ -1,0 +1,32 @@
+{
+  "gameModes": {
+    "rowing": {
+      "routeDistance": 1600,
+      "timeLimit": 300,
+      "countdownSeconds": 3,
+      "resultsDisplaySeconds": 8,
+      "idleTimeoutSeconds": 10,
+      "machineTopic": "marathon/machine/rowing"
+    },
+    "running": {
+      "routeDistance": 1600,
+      "timeLimit": 300,
+      "countdownSeconds": 3,
+      "resultsDisplaySeconds": 8,
+      "idleTimeoutSeconds": 10,
+      "machineTopic": "marathon/machine/treadmill"
+    },
+    "cycling": {
+      "routeDistance": 2000,
+      "timeLimit": 240,
+      "countdownSeconds": 3,
+      "resultsDisplaySeconds": 8,
+      "idleTimeoutSeconds": 10,
+      "machineTopic": "marathon/machine/bike"
+    }
+  },
+  "broadcast": {
+    "onConnect": true,
+    "intervalSeconds": 5
+  }
+}

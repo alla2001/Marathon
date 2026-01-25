@@ -1,0 +1,8 @@
+<ui:UXML xmlns:ui="UnityEngine.UIElements" xmlns:uie="UnityEditor.UIElements" editor-extension-mode="False">
+    <Style src="project://database/Assets/UI/TestFrame.uss?fileID=7433441132597879392&amp;guid=6cc77ca798a5647409a6d95ff0c67fbe&amp;type=3#TestFrame"/>
+    <ui:VisualElement name="TestFrameRoot" class="test-frame-root" style="overflow: hidden;">
+        <ui:VisualElement name="Background" class="background-layer" style="top: -17px; left: -347px;"/>
+        <ui:VisualElement name="ArabicText" class="arabic-text"/>
+        <ui:VisualElement name="RowingText" class="rowing-text"/>
+    </ui:VisualElement>
+</ui:UXML>

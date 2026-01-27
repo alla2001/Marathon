@@ -21,7 +21,7 @@ Material:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_Name: Water_mat_01
-  m_Shader: {fileID: -6465566751694194690, guid: dd97de70edf8a4141bee758a2efe7ff8, type: 3}
+  m_Shader: {fileID: 4800000, guid: 2e653dbabbfeaab449d54941a1b19977, type: 3}
   m_Parent: {fileID: 0}
   m_ModifiedSerializedProperties: 0
   m_ValidKeywords: []
@@ -49,6 +49,22 @@ Material:
         m_Texture: {fileID: 2800000, guid: 2ed3d41b7c655bf4daa77f71b994f6ed, type: 3}
         m_Scale: {x: 1, y: 1}
         m_Offset: {x: 0, y: 0}
+    - _CausticsTexture:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _FoamNoise:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _NormalMap:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _NormalMap2:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
     - _Texture2DAsset_a7c025c2aba147adbdae5627d7dffcc2_Out_0:
         m_Texture: {fileID: 0}
         m_Scale: {x: 1, y: 1}
@@ -69,17 +85,45 @@ Material:
     m_Floats:
     - Boolean_d3c978b0d14a4f66be175a9b89855be0: 0
     - Vector1_55003dfa023448c3bffa42f3ca4a99a4: 1
-    - Vector1_6269b1025b26473ca8bc61634f34b537: 0.935
-    - Vector1_687f54e8c371429f86b9eaab0e7dfe3e: 0.181
-    - Vector1_6c82dffdd68049bcb019d3a9c64c92a0: 0.222
+    - Vector1_6269b1025b26473ca8bc61634f34b537: 1
+    - Vector1_687f54e8c371429f86b9eaab0e7dfe3e: 0.342
+    - Vector1_6c82dffdd68049bcb019d3a9c64c92a0: 0.189
     - Vector1_6f56a0970372485390c6587863c2374e: -3.5
-    - Vector1_7273530c27a34c9f8ee5723b84f96baa: 0.02
+    - Vector1_7273530c27a34c9f8ee5723b84f96baa: 0.08
     - Vector1_dada42ebfac44076897b6de67441ba32: 0.3
+    - _CausticsIntensity: 0.531
+    - _CausticsScale: 1.62
+    - _CausticsSpeed: 0.433
+    - _DepthMaxDistance: 8.8
+    - _FoamCutoff: 0.366
+    - _FoamDistance: 1.61
+    - _FoamIntensity: 1.185
+    - _FoamNoiseScale: 2.33
+    - _FresnelIntensity: 0.5
+    - _FresnelPower: 3.24
+    - _Metallic: 0
+    - _NormalSpeed: 0.5
+    - _NormalStrength: 0.665
+    - _NormalTiling: 1
     - _QueueControl: 0
     - _QueueOffset: 0
+    - _RefractionStrength: 0.361
+    - _Smoothness: 0.511
+    - _SparkleIntensity: 0
+    - _SparkleScale: 1
+    - _SubsurfaceDistortion: 0.5
+    - _SubsurfaceIntensity: 0.478
+    - _WaveAmplitude: 0.2
+    - _WaveFrequency: 1
+    - _WaveSpeed: 0.51
     m_Colors:
     - Color_36218622185947c6a5ae36366d8e21d8: {r: 0.21893913, g: 0.26514482, b: 0.3773585, a: 1}
     - Color_93e06cd551a5449091bcde90b46765a0: {r: 0, g: 0.5098039, b: 0.4200284, a: 1}
     - Vector2_4351ac2be1d74054986ec5378db9d578: {r: 15.63, g: 3.17, b: 0, a: 0}
+    - _DeepColor: {r: 0.9669811, g: 0.9786015, b: 1, a: 0.749}
+    - _FoamColor: {r: 0.6143645, g: 0.6481136, b: 0.735849, a: 1}
+    - _ShallowColor: {r: 0, g: 0.44305304, b: 0.5943396, a: 0.725}
+    - _SubsurfaceColor: {r: 0.19999996, g: 0.8, b: 0.5, a: 1}
+    - _WaveDirection: {r: 1, g: 0, b: 0.5, a: 0}
   m_BuildTextureStacks: []
   m_AllowLocking: 1

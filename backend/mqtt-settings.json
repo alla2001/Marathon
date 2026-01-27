@@ -1,6 +1,6 @@
 {
   "brokerUrl": "mqtt://localhost:1883",
-  "clientId": "leaderboard-server",
+  "clientId": "marathon-leaderboard-server",
   "username": "",
   "password": "",
   "reconnectPeriod": 5000,

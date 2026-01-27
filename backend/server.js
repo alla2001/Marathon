@@ -184,11 +184,11 @@ function getAllTotalDistances() {
 // Load Game Configuration
 // ============================================
 let gameConfig = null;
+const CONFIG_PATH = path.join(__dirname, 'config.json');
 
 function loadGameConfig() {
-  const configPath = path.join(__dirname, 'config.json');
   try {
-    const configData = fs.readFileSync(configPath, 'utf8');
+    const configData = fs.readFileSync(CONFIG_PATH, 'utf8');
     gameConfig = JSON.parse(configData);
     console.log('[Config] Loaded game configuration:', Object.keys(gameConfig.gameModes).join(', '));
     return gameConfig;
@@ -208,6 +208,38 @@ function loadGameConfig() {
 }
 
 // ============================================
+// Hot-Reload Config Watcher
+// ============================================
+let configWatchDebounce = null;
+
+function setupConfigWatcher() {
+  console.log('[Config] Setting up hot-reload watcher for config.json');
+
+  fs.watch(CONFIG_PATH, (eventType, filename) => {
+    if (eventType === 'change') {
+      // Debounce to avoid multiple reloads from rapid saves
+      if (configWatchDebounce) {
+        clearTimeout(configWatchDebounce);
+      }
+
+      configWatchDebounce = setTimeout(() => {
+        console.log('[Config] config.json changed, reloading...');
+        const oldConfig = gameConfig;
+        loadGameConfig();
+
+        // Broadcast new config immediately if connected
+        if (mqttClient && mqttClient.connected) {
+          broadcastGameConfig();
+          console.log('[Config] Hot-reloaded and broadcasted new configuration!');
+        }
+
+        configWatchDebounce = null;
+      }, 500); // Wait 500ms before reloading to handle multiple rapid writes
+    }
+  });
+}
+
+// ============================================
 // MQTT Topics
 // ============================================
 const TOPICS = {
@@ -215,12 +247,14 @@ const TOPICS = {
   SUBMIT: 'leaderboard/submit',
   TOP10_REQUEST: 'leaderboard/top10/request',
   CHECK_USERNAME: 'leaderboard/check-username',
+  POSITION_REQUEST: 'leaderboard/position/request',
   CONFIG_REQUEST: 'marathon/config/request',
 
   // Responses (server publishes to station-specific topics)
   SUBMIT_RESPONSE: 'leaderboard/submit/response',
   TOP10_RESPONSE: 'leaderboard/top10/response',
   CHECK_USERNAME_RESPONSE: 'leaderboard/check-username/response',
+  POSITION_RESPONSE: 'leaderboard/position/response',
 
   // Broadcast topics
   CONFIG_BROADCAST: 'marathon/config/broadcast',
@@ -265,6 +299,7 @@ function connectMQTT() {
       TOPICS.SUBMIT,
       TOPICS.TOP10_REQUEST,
       TOPICS.CHECK_USERNAME,
+      TOPICS.POSITION_REQUEST,
       TOPICS.CONFIG_REQUEST
     ];
 
@@ -338,6 +373,9 @@ function handleMessage(topic, message) {
         break;
       case TOPICS.CONFIG_REQUEST:
         handleConfigRequest(payload);
+        break;
+      case TOPICS.POSITION_REQUEST:
+        handlePositionRequest(payload);
         break;
       default:
         console.log(`[MQTT] Unknown topic: ${topic}`);
@@ -580,6 +618,44 @@ function broadcastGameConfig(stationId = null) {
 }
 
 // ============================================
+// Position Request Handler
+// ============================================
+function getPositionForDistance(gameMode, distance) {
+  const entries = database[gameMode] || [];
+  // Count how many entries have a higher distance (they rank above this player)
+  const entriesAbove = entries.filter(e => (e.distance || 0) > distance).length;
+  // Position is 1-based (1 = first place)
+  return entriesAbove + 1;
+}
+
+function handlePositionRequest(payload) {
+  const { distance, gameMode, stationId } = payload;
+  const mode = (gameMode || 'rowing').toLowerCase();
+  const responseTopic = getResponseTopic(TOPICS.POSITION_RESPONSE, stationId);
+
+  if (distance === undefined) {
+    publishResponse(responseTopic, {
+      success: false,
+      error: 'Missing required field: distance',
+      stationId
+    });
+    return;
+  }
+
+  const position = getPositionForDistance(mode, distance);
+  const totalEntries = (database[mode] || []).length;
+
+  publishResponse(responseTopic, {
+    success: true,
+    position,
+    totalEntries,
+    distance,
+    gameMode: mode,
+    stationId
+  });
+}
+
+// ============================================
 // Broadcast All Leaderboards
 // ============================================
 function broadcastAllLeaderboards() {
@@ -664,6 +740,9 @@ function main() {
 
   // Load game configuration
   loadGameConfig();
+
+  // Setup hot-reload watcher for config
+  setupConfigWatcher();
 
   // Load JSON database
   loadDatabase();

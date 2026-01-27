@@ -18,26 +18,51 @@ public class GamePCIdleController : MonoBehaviour
     [SerializeField] private Texture2D countdown1Image;
     [SerializeField] private Texture2D countdownGoImage;
 
-    [Header("Countdown 3 Instructions")]
-    [SerializeField] private string instruction3Arabic = "خذ وضعيتك";
-    [SerializeField] private string instruction3English = "Get In Position";
+    [Header("Rowing Idle Instructions")]
+    [SerializeField] private string[] rowingInstructionsArabic = new string[] {
+        "حاول.. واصل",
+        "تحدّى نفسك للنهاية",
+        "من قلب الرّياض ومعالمها جدّف واستمتع"
+    };
+    [SerializeField] private string[] rowingInstructionsEnglish = new string[] {
+        "Strong pulls to finish",
+        "Challenge yourself & do it",
+        "Row through Riyadh & enjoy"
+    };
 
-    [Header("Countdown 2 Instructions")]
-    [SerializeField] private string instruction2Arabic = "استعد للسحب";
-    [SerializeField] private string instruction2English = "Prepare To Pull";
+    [Header("Running Idle Instructions")]
+    [SerializeField] private string[] runningInstructionsArabic = new string[] {
+        "خط النهاية يناديك",
+        "استمتع بالرحلة",
+        "من قلب الرّياض ومعالمها اركض واستمتع"
+    };
+    [SerializeField] private string[] runningInstructionsEnglish = new string[] {
+        "Chase the finish line",
+        "Enjoy the journey",
+        "Run through Riyadh & enjoy"
+    };
 
-    [Header("Countdown 1 Instructions")]
-    [SerializeField] private string instruction1Arabic = "اسحب بقوة!";
-    [SerializeField] private string instruction1English = "Pull Hard!";
+    [Header("Cycling Idle Instructions")]
+    [SerializeField] private string[] cyclingInstructionsArabic = new string[] {
+        "قدها وقدود!",
+        "من قلب الرّياض ومعالمها",
+        "اركب الدراجة واستمتع"
+    };
+    [SerializeField] private string[] cyclingInstructionsEnglish = new string[] {
+        "Push the distance",
+        "Ride through Riyadh",
+        "Challenge yourself & enjoy"
+    };
 
-    [Header("GO! Instructions")]
-    [SerializeField] private string instructionGoArabic = "انطلق!";
-    [SerializeField] private string instructionGoEnglish = "GO!";
 
     [Header("Animation Settings")]
     [SerializeField] private float animationDuration = 0.3f;
     [SerializeField] private float maxScale = 1.3f;
     [SerializeField] private float bounceScale = 0.95f;
+
+    [Header("Idle Instructions Cycling")]
+    [SerializeField] private float instructionCycleDuration = 4f; // How long each instruction shows
+    [SerializeField] private float instructionFadeDuration = 0.5f; // Fade transition time
 
     private VisualElement idleRoot;
     private VisualElement idleContent;
@@ -53,6 +78,9 @@ public class GamePCIdleController : MonoBehaviour
 
     private bool isCountingDown = false;
     private Coroutine currentAnimation;
+    private Coroutine instructionCycleCoroutine;
+    private int currentInstructionIndex = 0;
+    private string currentGameMode = "rowing";
 
     private void OnEnable()
     {
@@ -107,6 +135,9 @@ public class GamePCIdleController : MonoBehaviour
         {
             StopCoroutine(currentAnimation);
         }
+
+        // Stop instruction cycling
+        StopInstructionCycling();
 
         // Unsubscribe from MQTT events
         if (MQTTManager.Instance != null)
@@ -180,6 +211,10 @@ public class GamePCIdleController : MonoBehaviour
             countdownContent.style.display = DisplayStyle.None;
         }
 
+        // Show instructions and start cycling
+        ShowInstructionLabels(true);
+        StartInstructionCycling();
+
         isCountingDown = false;
     }
 
@@ -187,6 +222,10 @@ public class GamePCIdleController : MonoBehaviour
     {
         // Make sure the screen is visible
         ShowIdleScreen();
+
+        // Stop instruction cycling and hide instructions during countdown
+        StopInstructionCycling();
+        ShowInstructionLabels(false);
 
         // Hide main idle content (waves, text, sport image)
         if (idleContent != null)
@@ -210,9 +249,6 @@ public class GamePCIdleController : MonoBehaviour
             countdownContent.style.display = DisplayStyle.Flex;
         }
 
-        // Update instructions for this number
-        UpdateInstructions(number);
-
         // Update countdown image
         UpdateCountdownImage(number);
 
@@ -226,38 +262,119 @@ public class GamePCIdleController : MonoBehaviour
 
     private void UpdateInstructions(int number)
     {
-        string arabic = "";
-        string english = "";
+        // Instructions are only shown during idle, not during countdown
+        // This method is kept for compatibility but instructions are hidden during countdown
+    }
 
-        switch (number)
+    private void ShowInstructionLabels(bool show)
+    {
+        if (instructionArabic != null)
         {
-            case 3:
-                arabic = instruction3Arabic;
-                english = instruction3English;
+            instructionArabic.style.display = show ? DisplayStyle.Flex : DisplayStyle.None;
+        }
+        if (instructionEnglish != null)
+        {
+            instructionEnglish.style.display = show ? DisplayStyle.Flex : DisplayStyle.None;
+        }
+    }
+
+    private void StartInstructionCycling()
+    {
+        StopInstructionCycling();
+        instructionCycleCoroutine = StartCoroutine(CycleInstructionsCoroutine());
+    }
+
+    private void StopInstructionCycling()
+    {
+        if (instructionCycleCoroutine != null)
+        {
+            StopCoroutine(instructionCycleCoroutine);
+            instructionCycleCoroutine = null;
+        }
+    }
+
+    private IEnumerator CycleInstructionsCoroutine()
+    {
+        // Get instructions based on current game mode
+        string[] arabicInstructions;
+        string[] englishInstructions;
+
+        switch (currentGameMode.ToLower())
+        {
+            case "running":
+                arabicInstructions = runningInstructionsArabic;
+                englishInstructions = runningInstructionsEnglish;
                 break;
-            case 2:
-                arabic = instruction2Arabic;
-                english = instruction2English;
+            case "cycling":
+                arabicInstructions = cyclingInstructionsArabic;
+                englishInstructions = cyclingInstructionsEnglish;
                 break;
-            case 1:
-                arabic = instruction1Arabic;
-                english = instruction1English;
-                break;
-            case 0:
-                arabic = instructionGoArabic;
-                english = instructionGoEnglish;
+            case "rowing":
+            default:
+                arabicInstructions = rowingInstructionsArabic;
+                englishInstructions = rowingInstructionsEnglish;
                 break;
         }
 
+        currentInstructionIndex = 0;
+
+        // Set initial instruction
+        SetInstructionText(arabicInstructions[0], englishInstructions[0]);
+        SetInstructionOpacity(1f);
+
+        while (true)
+        {
+            // Wait for display duration
+            yield return new WaitForSeconds(instructionCycleDuration);
+
+            // Fade out
+            yield return StartCoroutine(FadeInstructions(1f, 0f, instructionFadeDuration));
+
+            // Move to next instruction
+            currentInstructionIndex = (currentInstructionIndex + 1) % arabicInstructions.Length;
+            SetInstructionText(arabicInstructions[currentInstructionIndex], englishInstructions[currentInstructionIndex]);
+
+            // Fade in
+            yield return StartCoroutine(FadeInstructions(0f, 1f, instructionFadeDuration));
+        }
+    }
+
+    private void SetInstructionText(string arabic, string english)
+    {
         if (instructionArabic != null)
         {
             instructionArabic.text = arabic;
         }
-
         if (instructionEnglish != null)
         {
             instructionEnglish.text = english;
         }
+    }
+
+    private void SetInstructionOpacity(float opacity)
+    {
+        if (instructionArabic != null)
+        {
+            instructionArabic.style.opacity = opacity;
+        }
+        if (instructionEnglish != null)
+        {
+            instructionEnglish.style.opacity = opacity;
+        }
+    }
+
+    private IEnumerator FadeInstructions(float fromOpacity, float toOpacity, float duration)
+    {
+        float elapsed = 0f;
+        while (elapsed < duration)
+        {
+            elapsed += Time.deltaTime;
+            float t = elapsed / duration;
+            float opacity = Mathf.Lerp(fromOpacity, toOpacity, t);
+            SetInstructionOpacity(opacity);
+            yield return null;
+        }
+        SetInstructionOpacity(toOpacity);
     }
 
     private void UpdateCountdownImage(int number)
@@ -398,6 +515,7 @@ public class GamePCIdleController : MonoBehaviour
 
     private void UpdateGameMode(string mode)
     {
+        currentGameMode = mode.ToLower();
         string modeUpper = mode.ToUpper();
         Debug.Log($"[GamePC Idle] UpdateGameMode called with: {mode}");
 
@@ -459,6 +577,12 @@ public class GamePCIdleController : MonoBehaviour
                     break;
             }
         }
+
+        // Restart instruction cycling with new game mode's instructions
+        if (!isCountingDown && idleRoot != null && idleRoot.style.display == DisplayStyle.Flex)
+        {
+            StartInstructionCycling();
+        }
     }
 
     public void ShowIdleScreen()
@@ -487,6 +611,9 @@ public class GamePCIdleController : MonoBehaviour
 
     public void HideIdleScreen()
     {
+        // Stop instruction cycling when hiding
+        StopInstructionCycling();
+
         if (idleRoot != null)
         {
             idleRoot.style.display = DisplayStyle.None;

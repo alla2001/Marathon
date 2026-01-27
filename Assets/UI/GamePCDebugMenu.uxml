@@ -41,6 +41,16 @@
                     <ui:Button text="Disconnect" name="DisconnectButton" style="width: 120px; height: 40px; font-size: 16px; background-color: rgb(150, 50, 50); color: rgb(255, 255, 255); -unity-font-style: bold;"/>
                 </ui:VisualElement>
             </ui:VisualElement>
+            <ui:VisualElement name="MachineTopicSection" style="background-color: rgb(50, 50, 70); padding-left: 15px; padding-right: 15px; padding-top: 10px; padding-bottom: 10px; border-radius: 5px; margin-bottom: 15px;">
+                <ui:Label text="MACHINE INPUT TOPIC" style="font-size: 14px; color: rgb(200, 150, 255); -unity-font-style: bold; margin-bottom: 8px;"/>
+                <ui:VisualElement name="MachineTopicRow" style="flex-direction: row; align-items: center; margin-bottom: 8px;">
+                    <ui:Label text="Custom Topic:" style="font-size: 14px; color: rgb(200, 200, 200); min-width: 120px;"/>
+                    <ui:TextField name="MachineTopicInput" value="" style="flex-grow: 1; height: 32px; font-size: 14px; background-color: rgb(40, 40, 40); border-color: rgb(100, 100, 100); color: rgb(29, 29, 29);"/>
+                </ui:VisualElement>
+                <ui:Label text="Leave empty to use default based on game mode:" style="font-size: 11px; color: rgb(150, 150, 150); margin-bottom: 4px;"/>
+                <ui:Label text="rowing_{id}/pulse | treadmill_{id}/pulse | cycle_{id}/pulse" name="MachineTopicHint" style="font-size: 11px; color: rgb(100, 180, 255);"/>
+                <ui:Label text="Current: (none)" name="CurrentMachineTopicLabel" style="font-size: 12px; color: rgb(100, 200, 100); margin-top: 8px;"/>
+            </ui:VisualElement>
             <ui:VisualElement name="InfoSection" style="background-color: rgb(40, 50, 60); padding-left: 15px; padding-right: 15px; padding-top: 10px; padding-bottom: 10px; border-radius: 5px; margin-bottom: 20px;">
                 <ui:Label text="&#8505;&#65039; Game PC displays what the Tablet sends" style="font-size: 14px; color: rgb(150, 200, 255); margin-bottom: 5px;"/>
                 <ui:Label text="Make sure Station ID matches your paired Tablet" style="font-size: 12px; color: rgb(180, 180, 180);"/>

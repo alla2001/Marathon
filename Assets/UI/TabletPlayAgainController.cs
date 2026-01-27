@@ -1,6 +1,7 @@
 using UnityEngine;
 using UnityEngine.UIElements;
 using MarathonMQTT;
+using System.Collections.Generic;
 
 public class TabletPlayAgainController : MonoBehaviour
 {
@@ -11,12 +12,26 @@ public class TabletPlayAgainController : MonoBehaviour
     [SerializeField] private Texture2D runningLandingImage;
     [SerializeField] private Texture2D cyclingLandingImage;
 
+    [Header("Arabic Landing Images (optional, leave empty to use same)")]
+    [SerializeField] private Texture2D rowingLandingImageArabic;
+    [SerializeField] private Texture2D runningLandingImageArabic;
+    [SerializeField] private Texture2D cyclingLandingImageArabic;
+
     private Label gameModeTitle;
     private Button playAgainButton;
     private Button goHomeButton;
+    private Button languageButton;
     private Image landingImage;
 
+    // Win/Lose UI elements (lists to support multiple elements with same name)
+    private List<VisualElement> winContainers = new List<VisualElement>();
+    private List<VisualElement> loseContainers = new List<VisualElement>();
+    private List<Label> resultTimeLabels = new List<Label>();
+    private List<Label> resultDistanceLabels = new List<Label>();
+
     private string currentGameMode = "ROWING";
+    private bool lastGameWon = false;
+    private bool isArabic = false;
 
     private void OnEnable()
     {
@@ -38,6 +53,38 @@ public class TabletPlayAgainController : MonoBehaviour
         playAgainButton = root.Q<Button>("PlayAgainButton");
         goHomeButton = root.Q<Button>("GoHomeButton");
         landingImage = root.Q<Image>("Landing-Image");
+        languageButton = root.Q<Button>("LanguageButton");
+
+        // Get ALL Win/Lose containers with any of these names
+        winContainers = FindAllElementsWithNames(root, "WinContainer", "WinScreen", "Victory", "Win", "WinPanel");
+        loseContainers = FindAllElementsWithNames(root, "LoseContainer", "LoseScreen", "GameOver", "Lose", "LosePanel", "Defeat");
+
+        // Get result labels from all containers
+        foreach (var container in winContainers)
+        {
+            var timeLabel = container.Q<Label>("TimeResult") ?? container.Q<Label>("WinTimeResult");
+            var distLabel = container.Q<Label>("DistanceResult") ?? container.Q<Label>("WinDistanceResult");
+            if (timeLabel != null) resultTimeLabels.Add(timeLabel);
+            if (distLabel != null) resultDistanceLabels.Add(distLabel);
+        }
+        foreach (var container in loseContainers)
+        {
+            var timeLabel = container.Q<Label>("TimeResult") ?? container.Q<Label>("LoseTimeResult");
+            var distLabel = container.Q<Label>("DistanceResult") ?? container.Q<Label>("LoseDistanceResult");
+            if (timeLabel != null && !resultTimeLabels.Contains(timeLabel)) resultTimeLabels.Add(timeLabel);
+            if (distLabel != null && !resultDistanceLabels.Contains(distLabel)) resultDistanceLabels.Add(distLabel);
+        }
+        // Also check root level
+        var rootTimeLabel = root.Q<Label>("TimeResult");
+        var rootDistLabel = root.Q<Label>("DistanceResult");
+        if (rootTimeLabel != null && !resultTimeLabels.Contains(rootTimeLabel)) resultTimeLabels.Add(rootTimeLabel);
+        if (rootDistLabel != null && !resultDistanceLabels.Contains(rootDistLabel)) resultDistanceLabels.Add(rootDistLabel);
+
+        // Hide all containers initially
+        foreach (var container in winContainers) container.style.display = DisplayStyle.None;
+        foreach (var container in loseContainers) container.style.display = DisplayStyle.None;
+
+        Debug.Log($"[TabletPlayAgain] Found {winContainers.Count} win containers, {loseContainers.Count} lose containers");
 
         // Register button callbacks
         if (playAgainButton != null)
@@ -56,6 +103,12 @@ public class TabletPlayAgainController : MonoBehaviour
         else
         {
             Debug.LogError("GoHomeButton not found in UI!");
+        }
+
+        // Register language button
+        if (languageButton != null)
+        {
+            languageButton.clicked += OnLanguageButtonClicked;
         }
 
         // Subscribe to MQTT events
@@ -86,6 +139,11 @@ public class TabletPlayAgainController : MonoBehaviour
             goHomeButton.clicked -= OnGoHomeClicked;
         }
 
+        if (languageButton != null)
+        {
+            languageButton.clicked -= OnLanguageButtonClicked;
+        }
+
         // Unsubscribe from MQTT
         if (MQTTManager.Instance != null)
         {
@@ -95,7 +153,22 @@ public class TabletPlayAgainController : MonoBehaviour
 
     private void OnGameOverReceived(GameOverMessage msg)
     {
-        Debug.Log($"Game Over - Distance: {msg.finalDistance}m, Time: {msg.finalTime}s");
+        Debug.Log($"Game Over - Distance: {msg.finalDistance}m, Time: {msg.finalTime}s, Won: {msg.completedCourse}");
+
+        lastGameWon = msg.completedCourse;
+
+        // Show appropriate win/lose containers (all of them)
+        foreach (var container in winContainers) container.style.display = lastGameWon ? DisplayStyle.Flex : DisplayStyle.None;
+        foreach (var container in loseContainers) container.style.display = lastGameWon ? DisplayStyle.None : DisplayStyle.Flex;
+
+        // Update all result labels
+        int minutes = Mathf.FloorToInt(msg.finalTime / 60f);
+        int seconds = Mathf.FloorToInt(msg.finalTime % 60f);
+        string timeText = $"{minutes:00}:{seconds:00}";
+        string distText = $"{Mathf.RoundToInt(msg.finalDistance)} m";
+
+        foreach (var label in resultTimeLabels) label.text = timeText;
+        foreach (var label in resultDistanceLabels) label.text = distText;
 
         // Show play again screen
         ShowPlayAgain();
@@ -174,27 +247,81 @@ public class TabletPlayAgainController : MonoBehaviour
     {
         if (landingImage == null) return;
 
-        Texture2D newImage = null;
-        switch (currentGameMode.ToLower())
+        Texture2D newImage = currentGameMode.ToLower() switch
         {
-            case "rowing":
-                newImage = rowingLandingImage;
-                break;
-            case "running":
-                newImage = runningLandingImage;
-                break;
-            case "cycling":
-                newImage = cyclingLandingImage;
-                break;
-            default:
-                newImage = rowingLandingImage;
-                break;
-        }
+            "rowing" => (isArabic && rowingLandingImageArabic != null) ? rowingLandingImageArabic : rowingLandingImage,
+            "running" => (isArabic && runningLandingImageArabic != null) ? runningLandingImageArabic : runningLandingImage,
+            "cycling" => (isArabic && cyclingLandingImageArabic != null) ? cyclingLandingImageArabic : cyclingLandingImage,
+            _ => (isArabic && rowingLandingImageArabic != null) ? rowingLandingImageArabic : rowingLandingImage
+        };
 
         if (newImage != null)
         {
             landingImage.image = newImage;
-            Debug.Log($"[TabletPlayAgain] Updated landing image for mode: {currentGameMode}");
+            Debug.Log($"[TabletPlayAgain] Updated landing image for mode: {currentGameMode} (arabic: {isArabic})");
         }
+    }
+
+    private void OnLanguageButtonClicked()
+    {
+        isArabic = !isArabic;
+        ApplyLanguage();
+        Debug.Log($"[TabletPlayAgain] Language switched to {(isArabic ? "Arabic" : "English")}");
+    }
+
+    public void SetLanguage(bool arabic)
+    {
+        isArabic = arabic;
+        ApplyLanguage();
+    }
+
+    private void ApplyLanguage()
+    {
+        // Language button
+        if (languageButton != null)
+        {
+            languageButton.text = isArabic ? "English" : "العربية";
+        }
+
+        // Update landing image for current language
+        UpdateLandingImage();
+    }
+
+    /// <summary>
+    /// Finds the first existing VisualElement from a list of possible names
+    /// </summary>
+    private VisualElement FindFirstElement(VisualElement parent, params string[] names)
+    {
+        foreach (string name in names)
+        {
+            var element = parent.Q<VisualElement>(name);
+            if (element != null)
+            {
+                Debug.Log($"[TabletPlayAgain] Found element with name: {name}");
+                return element;
+            }
+        }
+        return null;
+    }
+
+    /// <summary>
+    /// Finds ALL VisualElements that match any of the given names
+    /// </summary>
+    private List<VisualElement> FindAllElementsWithNames(VisualElement parent, params string[] names)
+    {
+        var results = new List<VisualElement>();
+        foreach (string name in names)
+        {
+            var elements = parent.Query<VisualElement>(name).ToList();
+            foreach (var element in elements)
+            {
+                if (!results.Contains(element))
+                {
+                    results.Add(element);
+                    Debug.Log($"[TabletPlayAgain] Found element: {name}");
+                }
+            }
+        }
+        return results;
     }
 }

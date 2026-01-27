@@ -30,14 +30,46 @@ public class TabletController : MonoBehaviour
     [SerializeField] private string cyclingDescriptionEnglish = "Cycle through a virtual course inspired by Riyadh landmarks.";
     [SerializeField] private string cyclingButtonText = "Start Cycling!";
 
+    [Header("Arabic Landing Images (optional, leave empty to use same)")]
+    [SerializeField] private Texture2D rowingLandingImageArabic;
+    [SerializeField] private Texture2D runningLandingImageArabic;
+    [SerializeField] private Texture2D cyclingLandingImageArabic;
+
+    [Header("Localization - English")]
+    [SerializeField] private string inputLabelEnglish = "Enter your name or nickname";
+    [SerializeField] private string namePlaceholderEnglish = "Name";
+    [SerializeField] private string validationDefaultEnglish = "Username must be at least 15 characters and contain only letters";
+    [SerializeField] private string usernameAvailableEnglish = "Username available";
+    [SerializeField] private string usernameTakenEnglish = "Username already taken";
+    [SerializeField] private string checkingEnglish = "Checking...";
+    [SerializeField] private string termsEnglish = "You assume all risks arising from the use, handling, or presence of sporting equipment at the event and agree to indemnify and hold harmless the event organizers, venue, sponsors, and app providers from any related claims or liabilities, except where prohibited by law.";
+
+    [Header("Localization - Arabic")]
+    [SerializeField] private string rowingButtonTextArabic = "!ابدأ التجديف";
+    [SerializeField] private string runningButtonTextArabic = "!ابدأ الجري";
+    [SerializeField] private string cyclingButtonTextArabic = "!ابدأ ركوب الدراجة";
+    [SerializeField] private string inputLabelArabic = "أدخل اسمك أو لقبك";
+    [SerializeField] private string namePlaceholderArabic = "الاسم";
+    [SerializeField] private string validationDefaultArabic = "يجب أن يكون اسم المستخدم مكوّناً من 15 حرفاً على الأقل وأن يحتوي على حروف فقط.";
+    [SerializeField] private string usernameAvailableArabic = "اسم المستخدم متاح";
+    [SerializeField] private string usernameTakenArabic = "اسم المستخدم مستخدم بالفعل";
+    [SerializeField] private string checkingArabic = "جاري التحقق...";
+    [SerializeField] private string termsArabic = "أنت تتحمل كامل المسؤولية عن جميع المخاطر الناشئة عن استخدام أو التعامل مع أو التواجد بالقرب من المعدات الرياضية في الفعالية، وتوافق على تعويض وإبراء ذمة منظمي الفعالية والمكان والرعاة ومزوّدي التطبيقات من أي مطالبات أو مسؤوليات ذات صلة، وذلك بالقدر الذي يسمح به القانون، ما لم يكن ذلك محظوراً بموجب القانون";
+
     private Button startButton;
     private Button languageButton;
     private TextField nameInput;
     private Toggle termsToggle;
     private Image landingImage;
     private Label descriptionLabel;
+    private Label inputLabel;
+    private Label validationLabel;
+    private Label termsLabel;
+    private VisualElement rulesRow; // "rules" container: toggle + terms text, flip for RTL
+    private VisualElement headerRow; // "Header" container: logo + language button, flip for RTL
 
     private bool isGameActive = false;
+    private bool isArabic = false;
     private StyleBackground originalButtonImage;
     private string currentGameMode = "rowing";
 
@@ -46,6 +78,7 @@ public class TabletController : MonoBehaviour
     private bool isCheckingUsername = false;
     private string lastCheckedUsername = "";
     private Coroutine usernameCheckCoroutine;
+    private Coroutine usernameCheckSafetyTimeout;
 
     private void OnEnable()
     {
@@ -68,7 +101,33 @@ public class TabletController : MonoBehaviour
         nameInput = root.Q<TextField>("NameInput");
         termsToggle = root.Q<Toggle>("TermsToggle");
         landingImage = root.Q<Image>("Landing-Image");
+
+        // Find main description label
         descriptionLabel = root.Q<Label>("DescriptionLine1");
+
+        // Find terms label (named DescriptionLine1Checkmark inside "rules" container)
+        termsLabel = root.Q<Label>("DescriptionLine1Checkmark");
+
+        // Find the "rules" row container (toggle + terms) and "Header" row (logo + lang button)
+        rulesRow = root.Q<VisualElement>("rules");
+        headerRow = root.Q<VisualElement>("Header");
+
+        // Find labels in UserNameArea by name "InputLabel"
+        var userNameArea = root.Q<VisualElement>("UserNameArea");
+        if (userNameArea != null)
+        {
+            var inputLabels = userNameArea.Query<Label>("InputLabel").ToList();
+            if (inputLabels.Count > 0)
+            {
+                inputLabel = inputLabels[0]; // "Enter your name or nickname"
+            }
+            if (inputLabels.Count > 1)
+            {
+                validationLabel = inputLabels[1]; // Validation message
+            }
+        }
+
+        Debug.Log($"[TabletController] descriptionLabel={descriptionLabel != null}, termsLabel={termsLabel != null}, inputLabel={inputLabel != null}, validationLabel={validationLabel != null}, rulesRow={rulesRow != null}, headerRow={headerRow != null}");
 
         // Register button callbacks
         if (startButton != null)
@@ -101,7 +160,7 @@ public class TabletController : MonoBehaviour
 
             nameInput.RegisterCallback<FocusInEvent>(evt =>
             {
-                if (nameInput.value == "Name")
+                if (nameInput.value == namePlaceholderEnglish || nameInput.value == namePlaceholderArabic)
                 {
                     nameInput.value = "";
                 }
@@ -186,6 +245,10 @@ public class TabletController : MonoBehaviour
         {
             StopCoroutine(usernameCheckCoroutine);
         }
+        if (usernameCheckSafetyTimeout != null)
+        {
+            StopCoroutine(usernameCheckSafetyTimeout);
+        }
     }
 
     private void OnMQTTConnected()
@@ -228,7 +291,8 @@ public class TabletController : MonoBehaviour
 
         // Check if name is valid (not empty, not placeholder, has actual content)
         string name = nameInput?.value ?? "";
-        bool hasValidName = !string.IsNullOrWhiteSpace(name) && name != "Name" && name.Length > 0;
+        bool isPlaceholder = name == namePlaceholderEnglish || name == namePlaceholderArabic;
+        bool hasValidName = !string.IsNullOrWhiteSpace(name) && !isPlaceholder && name.Length > 0;
 
         // Check if username is unique (and not currently checking)
         bool usernameValid = hasValidName && isUsernameUnique && !isCheckingUsername;
@@ -249,6 +313,7 @@ public class TabletController : MonoBehaviour
         }
 
         UpdateStartButtonState();
+        UpdateValidationLabel();
 
         // Cancel previous check
         if (usernameCheckCoroutine != null)
@@ -256,8 +321,8 @@ public class TabletController : MonoBehaviour
             StopCoroutine(usernameCheckCoroutine);
         }
 
-        // Start debounced check
-        if (!string.IsNullOrWhiteSpace(newUsername) && newUsername != "Name")
+        // Start debounced check (ignore both English and Arabic placeholders)
+        if (!string.IsNullOrWhiteSpace(newUsername) && newUsername != namePlaceholderEnglish && newUsername != namePlaceholderArabic)
         {
             usernameCheckCoroutine = StartCoroutine(DebouncedUsernameCheck(newUsername));
         }
@@ -266,6 +331,7 @@ public class TabletController : MonoBehaviour
             isCheckingUsername = false;
             isUsernameUnique = false;
             UpdateStartButtonState();
+            UpdateValidationLabel();
         }
     }
 
@@ -277,8 +343,19 @@ public class TabletController : MonoBehaviour
         // Check with LeaderboardManager
         if (LeaderboardManager.Instance != null)
         {
+            // Ensure we're subscribed to the result event (may not have been available in Start)
+            LeaderboardManager.Instance.OnUsernameCheckResult -= OnUsernameCheckResult;
+            LeaderboardManager.Instance.OnUsernameCheckResult += OnUsernameCheckResult;
+
             LeaderboardManager.Instance.CheckUsername(username);
             Debug.Log($"[TabletController] Checking username: {username}");
+
+            // Start safety timeout in case the callback never fires
+            if (usernameCheckSafetyTimeout != null)
+            {
+                StopCoroutine(usernameCheckSafetyTimeout);
+            }
+            usernameCheckSafetyTimeout = StartCoroutine(UsernameCheckSafetyTimeout(username));
         }
         else
         {
@@ -288,16 +365,41 @@ public class TabletController : MonoBehaviour
             isCheckingUsername = false;
             lastCheckedUsername = username;
             UpdateStartButtonState();
+            UpdateValidationLabel();
+        }
+    }
+
+    private IEnumerator UsernameCheckSafetyTimeout(string username)
+    {
+        yield return new WaitForSeconds(5f);
+
+        // If still checking the same username after 5s, assume unique
+        string currentUsername = nameInput?.value ?? "";
+        if (isCheckingUsername && currentUsername == username)
+        {
+            Debug.LogWarning($"[TabletController] Username check safety timeout for '{username}', assuming unique");
+            isUsernameUnique = true;
+            isCheckingUsername = false;
+            lastCheckedUsername = username;
+            UpdateStartButtonState();
+            UpdateValidationLabel();
         }
     }
 
     private void OnUsernameCheckResult(bool isUnique, string username)
     {
+        // Cancel safety timeout
+        if (usernameCheckSafetyTimeout != null)
+        {
+            StopCoroutine(usernameCheckSafetyTimeout);
+            usernameCheckSafetyTimeout = null;
+        }
+
         // Only process if this is for the current username
         string currentUsername = nameInput?.value ?? "";
         if (username != currentUsername)
         {
-            Debug.Log($"[TabletController] Ignoring stale username check result for '{username}'");
+            Debug.Log($"[TabletController] Ignoring stale username check result for '{username}' (current: '{currentUsername}')");
             return;
         }
 
@@ -308,6 +410,7 @@ public class TabletController : MonoBehaviour
         Debug.Log($"[TabletController] Username '{username}' is {(isUnique ? "UNIQUE" : "TAKEN")}");
 
         UpdateStartButtonState();
+        UpdateValidationLabel();
     }
 
     private void UpdateStartButtonState()
@@ -381,18 +484,154 @@ public class TabletController : MonoBehaviour
 
     private void ToggleLanguage()
     {
-        // Implement language switching logic here
-        var root = uiDocument.rootVisualElement;
+        isArabic = !isArabic;
+        ApplyLanguage();
+        Debug.Log($"[TabletController] Language switched to {(isArabic ? "Arabic" : "English")}");
+    }
 
-        if (languageButton.text == "العربية")
+    private void ApplyLanguage()
+    {
+        // Language button
+        if (languageButton != null)
         {
-            languageButton.text = "English";
-            // Switch UI to Arabic
+            languageButton.text = isArabic ? "English" : "العربية";
+        }
+
+        // Flip header row (logo + language button) for RTL
+        if (headerRow != null)
+        {
+            headerRow.style.flexDirection = isArabic ? FlexDirection.RowReverse : FlexDirection.Row;
+        }
+
+        // Main description (mode-dependent)
+        if (descriptionLabel != null)
+        {
+            descriptionLabel.text = GetDescriptionForMode();
+            descriptionLabel.style.unityTextAlign = isArabic ? TextAnchor.MiddleCenter : TextAnchor.MiddleCenter;
+        }
+
+        // Landing image (switch to Arabic version if provided)
+        UpdateGameModeContent();
+
+        // Input label
+        if (inputLabel != null)
+        {
+            inputLabel.text = isArabic ? inputLabelArabic : inputLabelEnglish;
+            inputLabel.style.unityTextAlign = isArabic ? TextAnchor.MiddleRight : TextAnchor.MiddleLeft;
+        }
+
+        // Name input placeholder (only if still placeholder)
+        if (nameInput != null)
+        {
+            string currentValue = nameInput.value;
+            if (currentValue == namePlaceholderEnglish || currentValue == namePlaceholderArabic || string.IsNullOrEmpty(currentValue))
+            {
+                nameInput.value = isArabic ? namePlaceholderArabic : namePlaceholderEnglish;
+            }
+            // Align text input for RTL
+            var textElement = nameInput.Q<TextElement>();
+            if (textElement != null)
+            {
+                textElement.style.unityTextAlign = isArabic ? TextAnchor.MiddleRight : TextAnchor.MiddleLeft;
+            }
+        }
+
+        // Start button text (mode-dependent)
+        if (startButton != null)
+        {
+            startButton.text = GetButtonTextForMode();
+        }
+
+        // Terms label (DescriptionLine1Checkmark)
+        if (termsLabel != null)
+        {
+            termsLabel.text = isArabic ? termsArabic : termsEnglish;
+            termsLabel.style.unityTextAlign = isArabic ? TextAnchor.MiddleRight : TextAnchor.MiddleLeft;
+        }
+
+        // Flip the "rules" row (toggle + terms label) for RTL
+        if (rulesRow != null)
+        {
+            rulesRow.style.flexDirection = isArabic ? FlexDirection.RowReverse : FlexDirection.Row;
+        }
+
+        // Flip toggle margin (margin-right in LTR, margin-left in RTL)
+        if (termsToggle != null)
+        {
+            termsToggle.style.marginRight = isArabic ? 0 : 20;
+            termsToggle.style.marginLeft = isArabic ? 20 : 0;
+        }
+
+        // Validation label alignment
+        if (validationLabel != null)
+        {
+            validationLabel.style.unityTextAlign = isArabic ? TextAnchor.MiddleRight : TextAnchor.MiddleLeft;
+        }
+
+        // Update validation text
+        UpdateValidationLabel();
+    }
+
+    private string GetDescriptionForMode()
+    {
+        return currentGameMode.ToLower() switch
+        {
+            "rowing" => isArabic ? rowingDescriptionArabic : rowingDescriptionEnglish,
+            "running" => isArabic ? runningDescriptionArabic : runningDescriptionEnglish,
+            "cycling" => isArabic ? cyclingDescriptionArabic : cyclingDescriptionEnglish,
+            _ => isArabic ? rowingDescriptionArabic : rowingDescriptionEnglish
+        };
+    }
+
+    private string GetButtonTextForMode()
+    {
+        return currentGameMode.ToLower() switch
+        {
+            "rowing" => isArabic ? rowingButtonTextArabic : rowingButtonText,
+            "running" => isArabic ? runningButtonTextArabic : runningButtonText,
+            "cycling" => isArabic ? cyclingButtonTextArabic : cyclingButtonText,
+            _ => isArabic ? rowingButtonTextArabic : rowingButtonText
+        };
+    }
+
+    private void UpdateValidationLabel()
+    {
+        if (validationLabel == null) return;
+
+        string currentUsername = nameInput?.value ?? "";
+        bool isPlaceholder = currentUsername == namePlaceholderEnglish || currentUsername == namePlaceholderArabic;
+
+        Color tintColor;
+
+        if (string.IsNullOrWhiteSpace(currentUsername) || isPlaceholder)
+        {
+            validationLabel.text = isArabic ? validationDefaultArabic : validationDefaultEnglish;
+            validationLabel.style.color = new Color(1f, 1f, 1f, 1f);
+            tintColor = Color.white; // Default/neutral
+        }
+        else if (isCheckingUsername)
+        {
+            validationLabel.text = isArabic ? checkingArabic : checkingEnglish;
+            validationLabel.style.color = new Color(1f, 0.8f, 0.2f, 1f); // Yellow
+            tintColor = new Color(1f, 0.9f, 0.5f, 1f); // Light yellow tint
+        }
+        else if (!isUsernameUnique)
+        {
+            validationLabel.text = isArabic ? usernameTakenArabic : usernameTakenEnglish;
+            validationLabel.style.color = new Color(1f, 0.3f, 0.3f, 1f); // Red
+            tintColor = new Color(1f, 0.6f, 0.6f, 1f); // Light red tint
         }
         else
         {
-            languageButton.text = "العربية";
-            // Switch UI to English
+            validationLabel.text = isArabic ? usernameAvailableArabic : usernameAvailableEnglish;
+            validationLabel.style.color = new Color(0.3f, 1f, 0.3f, 1f); // Green
+            tintColor = new Color(0.6f, 1f, 0.6f, 1f); // Light green tint
+        }
+
+        // Update input field background tint
+        if (nameInput != null)
+        {
+            nameInput.style.unityBackgroundImageTintColor = tintColor;
         }
     }
 
@@ -402,35 +641,30 @@ public class TabletController : MonoBehaviour
         UpdateGameModeContent();
     }
 
+    /// <summary>
+    /// Gets current language state so other screens can sync
+    /// </summary>
+    public bool IsArabic => isArabic;
+
+    /// <summary>
+    /// Sets language from external source (e.g. TabletUIManager syncing screens)
+    /// </summary>
+    public void SetLanguage(bool arabic)
+    {
+        isArabic = arabic;
+        ApplyLanguage();
+    }
+
     private void UpdateGameModeContent()
     {
-        Texture2D newLandingImage = null;
-        string newDescription = "";
-        string newButtonText = "";
-
-        switch (currentGameMode.ToLower())
+        // Pick landing image based on mode AND language
+        Texture2D newLandingImage = currentGameMode.ToLower() switch
         {
-            case "rowing":
-                newLandingImage = rowingLandingImage;
-                newDescription = rowingDescriptionEnglish;
-                newButtonText = rowingButtonText;
-                break;
-            case "running":
-                newLandingImage = runningLandingImage;
-                newDescription = runningDescriptionEnglish;
-                newButtonText = runningButtonText;
-                break;
-            case "cycling":
-                newLandingImage = cyclingLandingImage;
-                newDescription = cyclingDescriptionEnglish;
-                newButtonText = cyclingButtonText;
-                break;
-            default:
-                newLandingImage = rowingLandingImage;
-                newDescription = rowingDescriptionEnglish;
-                newButtonText = rowingButtonText;
-                break;
-        }
+            "rowing" => (isArabic && rowingLandingImageArabic != null) ? rowingLandingImageArabic : rowingLandingImage,
+            "running" => (isArabic && runningLandingImageArabic != null) ? runningLandingImageArabic : runningLandingImage,
+            "cycling" => (isArabic && cyclingLandingImageArabic != null) ? cyclingLandingImageArabic : cyclingLandingImage,
+            _ => (isArabic && rowingLandingImageArabic != null) ? rowingLandingImageArabic : rowingLandingImage
+        };
 
         // Update landing image
         if (landingImage != null && newLandingImage != null)
@@ -438,19 +672,19 @@ public class TabletController : MonoBehaviour
             landingImage.image = newLandingImage;
         }
 
-        // Update description
+        // Update description (language-aware)
         if (descriptionLabel != null)
         {
-            descriptionLabel.text = newDescription;
+            descriptionLabel.text = GetDescriptionForMode();
         }
 
-        // Update start button text
+        // Update start button text (language-aware)
         if (startButton != null)
         {
-            startButton.text = newButtonText;
+            startButton.text = GetButtonTextForMode();
         }
 
-        Debug.Log($"[TabletController] Updated content for game mode: {currentGameMode}");
+        Debug.Log($"[TabletController] Updated content for game mode: {currentGameMode} (arabic: {isArabic})");
     }
 
     // MQTT Message Handlers

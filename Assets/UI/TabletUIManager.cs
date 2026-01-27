@@ -137,6 +137,7 @@ public class TabletUIManager : MonoBehaviour
         Debug.Log("[TabletUI] Showing METRICS screen");
         currentState = TabletScreenState.METRICS;
 
+        SyncLanguage();
         HideAllScreens();
 
         if (metricsScreen != null)
@@ -150,6 +151,7 @@ public class TabletUIManager : MonoBehaviour
         Debug.Log("[TabletUI] Showing PLAY AGAIN screen");
         currentState = TabletScreenState.PLAY_AGAIN;
 
+        SyncLanguage();
         HideAllScreens();
 
         if (playAgainScreen != null)
@@ -185,6 +187,20 @@ public class TabletUIManager : MonoBehaviour
     {
         // Called when player clicks "Go Home"
         ShowStartScreen();
+    }
+
+    /// <summary>
+    /// Syncs language state from start screen to all other screens
+    /// Called when transitioning screens to keep language consistent
+    /// </summary>
+    private void SyncLanguage()
+    {
+        if (startScreen == null) return;
+
+        bool isArabic = startScreen.IsArabic;
+
+        if (metricsScreen != null) metricsScreen.SetLanguage(isArabic);
+        if (playAgainScreen != null) playAgainScreen.SetLanguage(isArabic);
     }
 
     // Public getters

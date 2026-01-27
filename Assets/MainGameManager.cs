@@ -189,16 +189,41 @@ public class MainGameManager : MonoBehaviour
 
     private void OnGameConfigReceived(GameConfigMessage msg)
     {
-        Debug.Log("[MainGameManager] Received GAME_CONFIG from server");
-
         if (msg.gameModes == null)
         {
             Debug.LogWarning("[MainGameManager] Game config has no game modes!");
             return;
         }
 
-        // Store and apply config
-        ApplyReceivedConfig(msg);
+        // Store config for later use
+        receivedConfig = msg;
+
+        // Only apply config if in IDLE state and values actually changed
+        if (currentState == GameState.IDLE)
+        {
+            // Check if distance would actually change
+            float newDistance = GetDistanceFromConfig(msg, currentGameMode);
+            if (Mathf.Abs(newDistance - totalDistance) > 0.1f)
+            {
+                Debug.Log($"[MainGameManager] Config changed - applying new distance: {newDistance}m (was {totalDistance}m)");
+                ApplyReceivedConfig(msg);
+            }
+        }
+    }
+
+    private float GetDistanceFromConfig(GameConfigMessage config, string gameMode)
+    {
+        if (config?.gameModes == null) return totalDistance;
+
+        GameModeConfig modeConfig = null;
+        switch (gameMode.ToLower())
+        {
+            case "rowing": modeConfig = config.gameModes.rowing; break;
+            case "running": modeConfig = config.gameModes.running; break;
+            case "cycling": modeConfig = config.gameModes.cycling; break;
+        }
+
+        return modeConfig?.routeDistance ?? totalDistance;
     }
 
     public void ApplyReceivedConfig(GameConfigMessage config)
@@ -315,16 +340,20 @@ public class MainGameManager : MonoBehaviour
     {
         SetGameState(GameState.COUNTDOWN);
 
-        // Send countdown messages
-        for (int i = countdownSeconds; i > 0; i--)
+        // Always show 3, 2, 1, GO but spread over countdownSeconds
+        // 4 steps total (3, 2, 1, GO), so each step = countdownSeconds / 4
+        float stepDuration = countdownSeconds / 4f;
+
+        // Send countdown messages: 3, 2, 1
+        for (int i = 3; i > 0; i--)
         {
             SendCountdownMessage(i);
-            yield return new WaitForSeconds(1f);
+            yield return new WaitForSeconds(stepDuration);
         }
 
         // Send GO! (0)
         SendCountdownMessage(0);
-        yield return new WaitForSeconds(1f);
+        yield return new WaitForSeconds(stepDuration);
 
         // Start the game
         SetGameState(GameState.PLAYING);
@@ -390,6 +419,18 @@ public class MainGameManager : MonoBehaviour
                 StopCoroutine(gameDataCoroutine);
             }
             gameDataCoroutine = StartCoroutine(SendGameDataCoroutine());
+        }
+    }
+
+    /// <summary>
+    /// Public method to trigger game over from external sources (e.g., GameHUDController when time expires)
+    /// </summary>
+    public void TriggerGameOver(bool completed)
+    {
+        if (currentState == GameState.PLAYING || currentState == GameState.PAUSED)
+        {
+            Debug.Log($"[MainGameManager] TriggerGameOver called - completed: {completed}");
+            FinishGame(completed);
         }
     }
 
@@ -487,6 +528,18 @@ public class MainGameManager : MonoBehaviour
         // Send game over message via MQTT
         SendGameOverMessage(completed);
 
+        // Submit score to leaderboard
+        if (LeaderboardManager.Instance != null && !string.IsNullOrEmpty(playerName))
+        {
+            int score = Mathf.RoundToInt(currentDistance);
+            LeaderboardManager.Instance.SubmitScore(playerName, score, currentDistance, currentTime, currentGameMode);
+            Debug.Log($"[MainGameManager] Submitted score to leaderboard: {playerName}, score={score}, distance={currentDistance:F1}m, mode={currentGameMode}");
+        }
+        else
+        {
+            Debug.LogWarning("[MainGameManager] Cannot submit score - LeaderboardManager or playerName missing");
+        }
+
         Debug.Log($"Game finished! Distance: {currentDistance}m, Time: {currentTime}s, Completed: {completed}");
 
         // Auto-reset after delay
@@ -548,6 +601,15 @@ public class MainGameManager : MonoBehaviour
     public void SetSpeed(float speed)
     {
         currentSpeed = speed;
+    }
+
+    /// <summary>
+    /// Called by MachineDataHandler when any machine data is received.
+    /// Resets the idle timer so we don't force-reset while the machine is active.
+    /// </summary>
+    public void OnMachineDataReceived()
+    {
+        lastMovementTime = Time.time;
     }
 
     public void SetTotalDistance(float distance)

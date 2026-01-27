@@ -4,26 +4,36 @@ using System;
 
 /// <summary>
 /// Receives machine data from MQTT and feeds it to the SplinePlayerController
-/// Subscribes to: treadmill_{deviceId}/pulse
+/// Topic format: {machineTopic}/pulse
+/// Defaults based on game mode if machineTopic is empty:
+///   - rowing: rowing_{stationId}/pulse
+///   - running: treadmill_{stationId}/pulse
+///   - cycling: cycle_{stationId}/pulse
 /// </summary>
 public class MachineDataHandler : MonoBehaviour
 {
     [Header("References")]
     [SerializeField] private SplinePlayerController playerController;
+    [SerializeField] private MainGameManager gameManager;
 
     [Header("Machine Settings")]
-    [SerializeField] private string deviceId = "treadmill_1"; // Device ID for this station
+    [SerializeField] private string customMachineTopic = ""; // Custom topic override (leave empty for auto)
     [SerializeField] private string gameMode = "rowing";
     [SerializeField] private float speedMultiplier = 1f;
     [SerializeField] private bool useMachineData = false; // Enable when machine is connected
 
     private string currentTopic = "";
+    private int stationId = 1;
 
     private void Start()
     {
         if (playerController == null)
         {
             playerController = FindObjectOfType<SplinePlayerController>();
+        }
+        if (gameManager == null)
+        {
+            gameManager = FindObjectOfType<MainGameManager>();
         }
 
         // Subscribe to the machine topic
@@ -59,14 +69,55 @@ public class MachineDataHandler : MonoBehaviour
         if (MQTTManager.Instance == null || !MQTTManager.Instance.IsConnected)
             return;
 
-        // Subscribe to treadmill topic: treadmill_{deviceId}/pulse
-        currentTopic = $"{deviceId}/pulse";
+        // Get station ID from MQTTManager
+        stationId = MQTTManager.Instance.StationId;
+
+        // Unsubscribe from old topic if exists
+        if (!string.IsNullOrEmpty(currentTopic))
+        {
+            MQTTManager.Instance.Unsubscribe(currentTopic);
+        }
+
+        // Determine topic: use custom if set, otherwise use default based on game mode
+        string baseTopic = GetMachineTopic();
+        currentTopic = $"{baseTopic}/pulse";
+
         MQTTManager.Instance.Subscribe(currentTopic);
 
-        // Also subscribe to the custom event for processing these messages
+        // Register for raw messages if not already
+        MQTTManager.Instance.OnRawMessageReceived -= OnRawMachineMessage;
         MQTTManager.Instance.OnRawMessageReceived += OnRawMachineMessage;
 
-        Debug.Log($"[MachineDataHandler] Subscribed to {currentTopic}");
+        Debug.Log($"[MachineDataHandler] Subscribed to {currentTopic} (mode: {gameMode}, station: {stationId})");
+    }
+
+    /// <summary>
+    /// Gets the machine topic based on custom setting or game mode default
+    /// </summary>
+    private string GetMachineTopic()
+    {
+        // If custom topic is set, use it
+        if (!string.IsNullOrWhiteSpace(customMachineTopic))
+        {
+            return customMachineTopic;
+        }
+
+        // Otherwise use default based on game mode
+        return gameMode.ToLower() switch
+        {
+            "rowing" => $"rowing_{stationId}",
+            "running" => $"treadmill_{stationId}",
+            "cycling" => $"cycle_{stationId}",
+            _ => $"treadmill_{stationId}"
+        };
+    }
+
+    /// <summary>
+    /// Gets the current topic being used
+    /// </summary>
+    public string GetCurrentTopic()
+    {
+        return currentTopic;
     }
 
     private void OnRawMachineMessage(string topic, string message)
@@ -100,6 +151,12 @@ public class MachineDataHandler : MonoBehaviour
 
         // Apply speed multiplier based on game mode
         float adjustedSpeed = speedMs * speedMultiplier;
+
+        // Reset idle timer if machine is reporting non-zero speed
+        if (gameManager != null && speedKmh > 0f)
+        {
+            gameManager.OnMachineDataReceived();
+        }
 
         // Update player controller with speed
         playerController.SetMachineSpeed(adjustedSpeed);
@@ -136,6 +193,12 @@ public class MachineDataHandler : MonoBehaviour
             "cycling" => 1.5f,
             _ => 1f
         };
+
+        // Resubscribe to topic (will use new default based on game mode if no custom topic)
+        if (MQTTManager.Instance != null && MQTTManager.Instance.IsConnected)
+        {
+            SubscribeToMachineTopic();
+        }
     }
 
     public void EnableMachineInput(bool enable)
@@ -144,10 +207,27 @@ public class MachineDataHandler : MonoBehaviour
         Debug.Log($"[MachineDataHandler] Machine input {(enable ? "enabled" : "disabled")}");
     }
 
-    public void SetDeviceId(string id)
+    /// <summary>
+    /// Sets a custom machine topic. If empty, will use default based on game mode.
+    /// </summary>
+    public void SetCustomTopic(string topic)
     {
-        deviceId = id;
-        Debug.Log($"[MachineDataHandler] Device ID set to: {deviceId}");
+        customMachineTopic = topic;
+        Debug.Log($"[MachineDataHandler] Custom topic set to: {(string.IsNullOrEmpty(topic) ? "(auto)" : topic)}");
+
+        // Resubscribe with new topic
+        if (MQTTManager.Instance != null && MQTTManager.Instance.IsConnected)
+        {
+            SubscribeToMachineTopic();
+        }
+    }
+
+    /// <summary>
+    /// Gets the custom machine topic (empty means using default)
+    /// </summary>
+    public string GetCustomTopic()
+    {
+        return customMachineTopic;
     }
 }
 

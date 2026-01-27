@@ -15,18 +15,32 @@ public class TabletMetricsController : MonoBehaviour
     [SerializeField] private Texture2D runningLandingImage;
     [SerializeField] private Texture2D cyclingLandingImage;
 
+    [Header("Arabic Landing Images (optional, leave empty to use same)")]
+    [SerializeField] private Texture2D rowingLandingImageArabic;
+    [SerializeField] private Texture2D runningLandingImageArabic;
+    [SerializeField] private Texture2D cyclingLandingImageArabic;
+
     private Label gameModeTitle;
     private Image landingImage;
     private Label distanceValue;
     private Label timeValue;
+    private Label distanceLabelEN;
+    private Label distanceLabelAR;
+    private Label timeLabelEN;
+    private Label timeLabelAR;
+    private Button languageButton;
     private VisualElement speedometerNeedle;
     private VisualElement progressFill;
     private VisualElement distanceMarkers;
+    private VisualElement headerRow;
+    private VisualElement statsBar;
+    private VisualElement progressTrack;
 
     private float currentDistance = 0f;
     private float currentTime = 0f;
     private float timeRemaining = 300f;
     private string currentGameMode = "ROWING";
+    private bool isArabic = false;
 
     private void OnEnable()
     {
@@ -51,6 +65,30 @@ public class TabletMetricsController : MonoBehaviour
         progressFill = root.Q<VisualElement>("ProgressFill");
         distanceMarkers = root.Q<VisualElement>("DistanceMarkers");
         landingImage = root.Q<Image>("Landing-Image");
+
+        // Get bilingual labels
+        distanceLabelEN = root.Q<Label>("DistanceLabelEN");
+        distanceLabelAR = root.Q<Label>("DistanceLabelAR");
+        languageButton = root.Q<Button>("LanguageButton");
+
+        // Get layout elements for RTL support
+        headerRow = root.Q<VisualElement>("Header");
+        statsBar = root.Q<VisualElement>("StatsBar");
+        progressTrack = root.Q<VisualElement>("ProgressTrack");
+
+        // TimeLabel has two elements (EN and AR) with the same name
+        var timeLabels = root.Query<Label>("TimeLabel").ToList();
+        if (timeLabels.Count >= 2)
+        {
+            timeLabelEN = timeLabels[0];
+            timeLabelAR = timeLabels[1];
+        }
+
+        // Register language button
+        if (languageButton != null)
+        {
+            languageButton.clicked += OnLanguageButtonClicked;
+        }
 
         // Subscribe to MQTT game data messages
         if (MQTTManager.Instance != null)
@@ -80,6 +118,11 @@ public class TabletMetricsController : MonoBehaviour
             MQTTManager.Instance.OnGameDataReceived -= OnGameDataReceived;
             MQTTManager.Instance.OnCountdownReceived -= OnCountdownReceived;
             MQTTManager.Instance.OnGameStateReceived -= OnGameStateReceived;
+        }
+
+        if (languageButton != null)
+        {
+            languageButton.clicked -= OnLanguageButtonClicked;
         }
     }
 
@@ -235,28 +278,74 @@ public class TabletMetricsController : MonoBehaviour
     {
         if (landingImage == null) return;
 
-        Texture2D newImage = null;
-        switch (currentGameMode.ToLower())
+        Texture2D newImage = currentGameMode.ToLower() switch
         {
-            case "rowing":
-                newImage = rowingLandingImage;
-                break;
-            case "running":
-                newImage = runningLandingImage;
-                break;
-            case "cycling":
-                newImage = cyclingLandingImage;
-                break;
-            default:
-                newImage = rowingLandingImage;
-                break;
-        }
+            "rowing" => (isArabic && rowingLandingImageArabic != null) ? rowingLandingImageArabic : rowingLandingImage,
+            "running" => (isArabic && runningLandingImageArabic != null) ? runningLandingImageArabic : runningLandingImage,
+            "cycling" => (isArabic && cyclingLandingImageArabic != null) ? cyclingLandingImageArabic : cyclingLandingImage,
+            _ => (isArabic && rowingLandingImageArabic != null) ? rowingLandingImageArabic : rowingLandingImage
+        };
 
         if (newImage != null)
         {
             landingImage.image = newImage;
             Debug.Log($"[Tablet Metrics] Updated landing image for mode: {currentGameMode}");
         }
+    }
+
+    private void OnLanguageButtonClicked()
+    {
+        isArabic = !isArabic;
+        ApplyLanguage();
+        Debug.Log($"[Tablet Metrics] Language switched to {(isArabic ? "Arabic" : "English")}");
+    }
+
+    public void SetLanguage(bool arabic)
+    {
+        isArabic = arabic;
+        ApplyLanguage();
+    }
+
+    private void ApplyLanguage()
+    {
+        // Language button
+        if (languageButton != null)
+        {
+            languageButton.text = isArabic ? "English" : "العربية";
+        }
+
+        // Flip header (language button left, logo right in Arabic)
+        if (headerRow != null)
+        {
+            headerRow.style.flexDirection = isArabic ? FlexDirection.RowReverse : FlexDirection.Row;
+        }
+
+        // Flip stats bar (time left, distance right in Arabic)
+        if (statsBar != null)
+        {
+            statsBar.style.flexDirection = isArabic ? FlexDirection.RowReverse : FlexDirection.Row;
+        }
+
+        // Flip distance markers direction (high values left, low right in Arabic)
+        if (distanceMarkers != null)
+        {
+            distanceMarkers.style.flexDirection = isArabic ? FlexDirection.RowReverse : FlexDirection.Row;
+        }
+
+        // Flip progress bar fill direction (fills right-to-left in Arabic)
+        if (progressTrack != null)
+        {
+            progressTrack.style.flexDirection = isArabic ? FlexDirection.RowReverse : FlexDirection.Row;
+        }
+
+        // In Arabic: show both EN and AR labels. In English: show only EN.
+        if (distanceLabelEN != null) distanceLabelEN.style.display = DisplayStyle.Flex;
+        if (distanceLabelAR != null) distanceLabelAR.style.display = isArabic ? DisplayStyle.Flex : DisplayStyle.None;
+        if (timeLabelEN != null) timeLabelEN.style.display = DisplayStyle.Flex;
+        if (timeLabelAR != null) timeLabelAR.style.display = isArabic ? DisplayStyle.Flex : DisplayStyle.None;
+
+        // Update landing image for current language
+        UpdateLandingImage();
     }
 
     public void SetTotalTime(float time)

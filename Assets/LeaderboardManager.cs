@@ -17,15 +17,18 @@ public class LeaderboardManager : MonoBehaviour
     public event Action<bool, string> OnUsernameCheckResult; // isUnique, username
     public event Action<bool, string> OnScoreSubmitResult; // success, message
     public event Action<LeaderboardEntry[]> OnTop10Received;
+    public event Action<int> OnPositionReceived; // position (1-based)
 
     // Topics
     private const string TOPIC_CHECK_USERNAME = "leaderboard/check-username";
     private const string TOPIC_SUBMIT = "leaderboard/submit";
     private const string TOPIC_TOP10_REQUEST = "leaderboard/top10/request";
+    private const string TOPIC_POSITION_REQUEST = "leaderboard/position/request";
 
     private string checkUsernameResponseTopic;
     private string submitResponseTopic;
     private string top10ResponseTopic;
+    private string positionResponseTopic;
 
     // Pending requests
     private string pendingUsernameCheck = null;
@@ -82,11 +85,13 @@ public class LeaderboardManager : MonoBehaviour
         checkUsernameResponseTopic = $"leaderboard/check-username/response/{stationId}";
         submitResponseTopic = $"leaderboard/submit/response/{stationId}";
         top10ResponseTopic = $"leaderboard/top10/response/{stationId}";
+        positionResponseTopic = $"leaderboard/position/response/{stationId}";
 
         // Subscribe to response topics
         MQTTManager.Instance.Subscribe(checkUsernameResponseTopic);
         MQTTManager.Instance.Subscribe(submitResponseTopic);
         MQTTManager.Instance.Subscribe(top10ResponseTopic);
+        MQTTManager.Instance.Subscribe(positionResponseTopic);
 
         Debug.Log($"[LeaderboardManager] Subscribed to response topics for station {stationId}");
     }
@@ -104,6 +109,10 @@ public class LeaderboardManager : MonoBehaviour
         else if (topic == top10ResponseTopic)
         {
             HandleTop10Response(message);
+        }
+        else if (topic == positionResponseTopic)
+        {
+            HandlePositionResponse(message);
         }
     }
 
@@ -192,7 +201,7 @@ public class LeaderboardManager : MonoBehaviour
     // ========================================
     // Submit Score
     // ========================================
-    public void SubmitScore(string username, int score, float distance, float time)
+    public void SubmitScore(string username, int score, float distance, float time, string gameMode = "rowing")
     {
         if (MQTTManager.Instance == null || !MQTTManager.Instance.IsConnected)
         {
@@ -207,13 +216,14 @@ public class LeaderboardManager : MonoBehaviour
             score = score,
             distance = distance,
             time = time,
+            gameMode = gameMode,
             stationId = MQTTManager.Instance.StationId
         };
 
         string json = JsonUtility.ToJson(request);
         PublishRaw(TOPIC_SUBMIT, json);
 
-        Debug.Log($"[LeaderboardManager] Submitting score for {username}: {score}");
+        Debug.Log($"[LeaderboardManager] Submitting score for {username}: score={score}, distance={distance:F1}m, time={time:F1}s, mode={gameMode}");
     }
 
     private void HandleSubmitResponse(string message)
@@ -268,6 +278,41 @@ public class LeaderboardManager : MonoBehaviour
     }
 
     // ========================================
+    // Position Request
+    // ========================================
+    public void RequestPosition(float distance, string gameMode)
+    {
+        if (MQTTManager.Instance == null || !MQTTManager.Instance.IsConnected)
+            return;
+
+        var request = new PositionRequest
+        {
+            distance = distance,
+            gameMode = gameMode,
+            stationId = MQTTManager.Instance.StationId
+        };
+
+        string json = JsonUtility.ToJson(request);
+        PublishRaw(TOPIC_POSITION_REQUEST, json);
+    }
+
+    private void HandlePositionResponse(string message)
+    {
+        try
+        {
+            var response = JsonUtility.FromJson<PositionResponse>(message);
+            if (response.success)
+            {
+                OnPositionReceived?.Invoke(response.position);
+            }
+        }
+        catch (Exception ex)
+        {
+            Debug.LogError($"[LeaderboardManager] Error parsing position response: {ex.Message}");
+        }
+    }
+
+    // ========================================
     // Helper
     // ========================================
     private void PublishRaw(string topic, string json)
@@ -306,6 +351,7 @@ public class ScoreSubmitRequest
     public int score;
     public float distance;
     public float time;
+    public string gameMode;
     public int stationId;
 }
 
@@ -341,4 +387,23 @@ public class LeaderboardEntry
     public int score;
     public float distance;
     public float time;
+}
+
+[Serializable]
+public class PositionRequest
+{
+    public float distance;
+    public string gameMode;
+    public int stationId;
+}
+
+[Serializable]
+public class PositionResponse
+{
+    public bool success;
+    public int position;
+    public int totalEntries;
+    public float distance;
+    public string gameMode;
+    public int stationId;
 }

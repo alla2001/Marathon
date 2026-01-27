@@ -113,11 +113,17 @@ public class SplinePlayerController : MonoBehaviour
         currentTimeRemaining = timeLimit; // Start with full time
         currentCheckpointIndex = 0;
 
-        // Reset spline position
+        // Reset spline position and refresh follower
         if (splineFollower != null)
         {
+            // Disable and re-enable to force refresh (fixes follower not updating issue)
+            splineFollower.enabled = false;
             splineFollower.SetPercent(0);
             splineFollower.follow = true;
+            splineFollower.enabled = true;
+
+            // Force rebuild the follower
+            splineFollower.RebuildImmediate();
         }
 
         // Reset checkpoints
@@ -146,11 +152,14 @@ public class SplinePlayerController : MonoBehaviour
         machineSpeed = 0f;
         currentCheckpointIndex = 0;
 
-        // Reset spline position to start
+        // Reset spline position to start and refresh follower
         if (splineFollower != null)
         {
+            splineFollower.enabled = false;
             splineFollower.SetPercent(0);
             splineFollower.follow = false;
+            splineFollower.enabled = true;
+            splineFollower.RebuildImmediate();
         }
 
         // Reset checkpoints

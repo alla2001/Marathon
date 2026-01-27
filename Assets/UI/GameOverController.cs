@@ -2,6 +2,7 @@ using UnityEngine;
 using UnityEngine.UIElements;
 using UnityEngine.SceneManagement;
 using System.Collections;
+using System.Collections.Generic;
 
 public class GameOverController : MonoBehaviour
 {
@@ -19,13 +20,13 @@ public class GameOverController : MonoBehaviour
     private Label timeResult;
     private Label distanceResult;
 
-    // Win/Lose UI elements
-    private VisualElement winContainer;
-    private VisualElement loseContainer;
-    private Label winTimeResult;
-    private Label winDistanceResult;
-    private Label loseTimeResult;
-    private Label loseDistanceResult;
+    // Win/Lose UI elements (lists to support multiple elements with same name)
+    private List<VisualElement> winContainers = new List<VisualElement>();
+    private List<VisualElement> loseContainers = new List<VisualElement>();
+    private List<Label> winTimeResults = new List<Label>();
+    private List<Label> winDistanceResults = new List<Label>();
+    private List<Label> loseTimeResults = new List<Label>();
+    private List<Label> loseDistanceResults = new List<Label>();
 
     private float finalTime;
     private float finalDistance;
@@ -48,22 +49,28 @@ public class GameOverController : MonoBehaviour
 
         root = uiDocument.rootVisualElement;
 
-        // Get Win/Lose containers
-        winContainer = root.Q<VisualElement>("WinContainer") ?? root.Q<VisualElement>("WinScreen") ?? root.Q<VisualElement>("Victory");
-        loseContainer = root.Q<VisualElement>("LoseContainer") ?? root.Q<VisualElement>("LoseScreen") ?? root.Q<VisualElement>("GameOver");
+        // Get ALL Win/Lose containers with any of these names
+        winContainers = FindAllElementsWithNames(root, "WinContainer", "WinScreen", "Victory", "Win", "WinPanel");
+        loseContainers = FindAllElementsWithNames(root, "LoseContainer", "LoseScreen", "GameOver", "Lose", "LosePanel", "Defeat");
 
-        // Get result labels from win container
-        if (winContainer != null)
+        Debug.Log($"[GameOverController] Found {winContainers.Count} win containers, {loseContainers.Count} lose containers");
+
+        // Get result labels from all win containers
+        foreach (var container in winContainers)
         {
-            winTimeResult = winContainer.Q<Label>("TimeResult") ?? winContainer.Q<Label>("WinTimeResult");
-            winDistanceResult = winContainer.Q<Label>("DistanceResult") ?? winContainer.Q<Label>("WinDistanceResult");
+            var timeLabel = container.Q<Label>("TimeResult") ?? container.Q<Label>("WinTimeResult");
+            var distLabel = container.Q<Label>("DistanceResult") ?? container.Q<Label>("WinDistanceResult");
+            if (timeLabel != null) winTimeResults.Add(timeLabel);
+            if (distLabel != null) winDistanceResults.Add(distLabel);
         }
 
-        // Get result labels from lose container
-        if (loseContainer != null)
+        // Get result labels from all lose containers
+        foreach (var container in loseContainers)
         {
-            loseTimeResult = loseContainer.Q<Label>("TimeResult") ?? loseContainer.Q<Label>("LoseTimeResult");
-            loseDistanceResult = loseContainer.Q<Label>("DistanceResult") ?? loseContainer.Q<Label>("LoseDistanceResult");
+            var timeLabel = container.Q<Label>("TimeResult") ?? container.Q<Label>("LoseTimeResult");
+            var distLabel = container.Q<Label>("DistanceResult") ?? container.Q<Label>("LoseDistanceResult");
+            if (timeLabel != null) loseTimeResults.Add(timeLabel);
+            if (distLabel != null) loseDistanceResults.Add(distLabel);
         }
 
         // Fallback to generic labels if win/lose specific ones not found
@@ -78,15 +85,15 @@ public class GameOverController : MonoBehaviour
             CreateBackgroundOverlay();
         }
 
-        // Hide containers initially
-        if (winContainer != null) winContainer.style.display = DisplayStyle.None;
-        if (loseContainer != null) loseContainer.style.display = DisplayStyle.None;
+        // Hide all containers initially
+        foreach (var container in winContainers) container.style.display = DisplayStyle.None;
+        foreach (var container in loseContainers) container.style.display = DisplayStyle.None;
 
         // Hide the game over screen initially
         root.style.display = DisplayStyle.None;
         root.style.opacity = 0f;
 
-        Debug.Log($"[GameOverController] Win container: {(winContainer != null ? "found" : "NOT FOUND")}, Lose container: {(loseContainer != null ? "found" : "NOT FOUND")}");
+        Debug.Log($"[GameOverController] Initialized - {winContainers.Count} win containers, {loseContainers.Count} lose containers");
     }
 
     private void OnDisable()
@@ -122,12 +129,14 @@ public class GameOverController : MonoBehaviour
             StopCoroutine(countUpCoroutine);
         }
 
-        // Show appropriate win/lose container
-        if (winContainer != null) winContainer.style.display = won ? DisplayStyle.Flex : DisplayStyle.None;
-        if (loseContainer != null) loseContainer.style.display = won ? DisplayStyle.None : DisplayStyle.Flex;
+        // Show appropriate win/lose containers (all of them)
+        foreach (var container in winContainers) container.style.display = won ? DisplayStyle.Flex : DisplayStyle.None;
+        foreach (var container in loseContainers) container.style.display = won ? DisplayStyle.None : DisplayStyle.Flex;
 
-        // Set which content container to animate
-        contentContainer = won ? (winContainer ?? contentContainer) : (loseContainer ?? contentContainer);
+        // Set which content container to animate (use first container if available)
+        var firstWinContainer = winContainers.Count > 0 ? winContainers[0] : null;
+        var firstLoseContainer = loseContainers.Count > 0 ? loseContainers[0] : null;
+        contentContainer = won ? (firstWinContainer ?? contentContainer) : (firstLoseContainer ?? contentContainer);
 
         // Start smooth transition
         transitionCoroutine = StartCoroutine(ShowTransitionCoroutine());
@@ -160,11 +169,13 @@ public class GameOverController : MonoBehaviour
             contentContainer.style.scale = new Scale(new Vector3(0.8f, 0.8f, 1f));
         }
 
-        // Clear result text initially (for the active container)
-        Label activeTimeLabel = didWin ? (winTimeResult ?? timeResult) : (loseTimeResult ?? timeResult);
-        Label activeDistanceLabel = didWin ? (winDistanceResult ?? distanceResult) : (loseDistanceResult ?? distanceResult);
-        if (activeTimeLabel != null) activeTimeLabel.text = "00:00";
-        if (activeDistanceLabel != null) activeDistanceLabel.text = "0 m";
+        // Clear result text initially (for all active containers)
+        var activeTimeLabels = didWin ? winTimeResults : loseTimeResults;
+        var activeDistanceLabels = didWin ? winDistanceResults : loseDistanceResults;
+        foreach (var label in activeTimeLabels) label.text = "00:00";
+        foreach (var label in activeDistanceLabels) label.text = "0 m";
+        if (timeResult != null) timeResult.text = "00:00";
+        if (distanceResult != null) distanceResult.text = "0 m";
 
         // Setup background fade transition
         SetupFadeTransition(root, fadeInDuration);
@@ -198,9 +209,9 @@ public class GameOverController : MonoBehaviour
     {
         float elapsed = 0f;
 
-        // Get the appropriate labels based on win/lose state
-        Label activeTimeLabel = didWin ? (winTimeResult ?? timeResult) : (loseTimeResult ?? timeResult);
-        Label activeDistanceLabel = didWin ? (winDistanceResult ?? distanceResult) : (loseDistanceResult ?? distanceResult);
+        // Get the appropriate labels based on win/lose state (all of them)
+        var activeTimeLabels = didWin ? winTimeResults : loseTimeResults;
+        var activeDistanceLabels = didWin ? winDistanceResults : loseDistanceResults;
 
         while (elapsed < resultCountUpDuration)
         {
@@ -210,21 +221,21 @@ public class GameOverController : MonoBehaviour
             // Ease out cubic for smooth deceleration
             float easedT = 1f - Mathf.Pow(1f - t, 3f);
 
-            // Update time display (count up)
+            // Update time display (count up) for all labels
             float currentTime = Mathf.Lerp(0f, finalTime, easedT);
-            if (activeTimeLabel != null)
-            {
-                int minutes = Mathf.FloorToInt(currentTime / 60f);
-                int seconds = Mathf.FloorToInt(currentTime % 60f);
-                activeTimeLabel.text = $"{minutes:00}:{seconds:00}";
-            }
+            int minutes = Mathf.FloorToInt(currentTime / 60f);
+            int seconds = Mathf.FloorToInt(currentTime % 60f);
+            string timeText = $"{minutes:00}:{seconds:00}";
 
-            // Update distance display (count up)
+            foreach (var label in activeTimeLabels) label.text = timeText;
+            if (timeResult != null) timeResult.text = timeText;
+
+            // Update distance display (count up) for all labels
             float currentDistance = Mathf.Lerp(0f, finalDistance, easedT);
-            if (activeDistanceLabel != null)
-            {
-                activeDistanceLabel.text = $"{Mathf.RoundToInt(currentDistance)} m";
-            }
+            string distText = $"{Mathf.RoundToInt(currentDistance)} m";
+
+            foreach (var label in activeDistanceLabels) label.text = distText;
+            if (distanceResult != null) distanceResult.text = distText;
 
             yield return null;
         }
@@ -295,24 +306,20 @@ public class GameOverController : MonoBehaviour
         int seconds = Mathf.FloorToInt(finalTime % 60f);
         string timeText = $"{minutes:00}:{seconds:00}";
 
-        // Update appropriate label based on win/lose
-        Label activeLabel = didWin ? (winTimeResult ?? timeResult) : (loseTimeResult ?? timeResult);
-        if (activeLabel != null)
-        {
-            activeLabel.text = timeText;
-        }
+        // Update all appropriate labels based on win/lose
+        var activeLabels = didWin ? winTimeResults : loseTimeResults;
+        foreach (var label in activeLabels) label.text = timeText;
+        if (timeResult != null) timeResult.text = timeText;
     }
 
     private void UpdateDistanceDisplay()
     {
         string distanceText = $"{Mathf.RoundToInt(finalDistance)} m";
 
-        // Update appropriate label based on win/lose
-        Label activeLabel = didWin ? (winDistanceResult ?? distanceResult) : (loseDistanceResult ?? distanceResult);
-        if (activeLabel != null)
-        {
-            activeLabel.text = distanceText;
-        }
+        // Update all appropriate labels based on win/lose
+        var activeLabels = didWin ? winDistanceResults : loseDistanceResults;
+        foreach (var label in activeLabels) label.text = distanceText;
+        if (distanceResult != null) distanceResult.text = distanceText;
     }
 
     // No button handlers - this is display only on Game PC
@@ -436,4 +443,42 @@ public class GameOverController : MonoBehaviour
     // Public getters
     public float FinalTime => finalTime;
     public float FinalDistance => finalDistance;
+
+    /// <summary>
+    /// Finds the first existing VisualElement from a list of possible names
+    /// </summary>
+    private VisualElement FindFirstExistingElement(VisualElement parent, params string[] names)
+    {
+        foreach (string name in names)
+        {
+            var element = parent.Q<VisualElement>(name);
+            if (element != null)
+            {
+                Debug.Log($"[GameOverController] Found element with name: {name}");
+                return element;
+            }
+        }
+        return null;
+    }
+
+    /// <summary>
+    /// Finds ALL VisualElements that match any of the given names
+    /// </summary>
+    private List<VisualElement> FindAllElementsWithNames(VisualElement parent, params string[] names)
+    {
+        var results = new List<VisualElement>();
+        foreach (string name in names)
+        {
+            var elements = parent.Query<VisualElement>(name).ToList();
+            foreach (var element in elements)
+            {
+                if (!results.Contains(element))
+                {
+                    results.Add(element);
+                    Debug.Log($"[GameOverController] Found element: {name}");
+                }
+            }
+        }
+        return results;
+    }
 }

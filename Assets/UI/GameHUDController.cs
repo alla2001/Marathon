@@ -13,6 +13,16 @@ public class GameHUDController : MonoBehaviour
     [Header("Checkpoint Settings")]
     [SerializeField] private float motivationDisplayDuration = 5f; // How long to show motivation text
     [SerializeField] private Sprite[] motivationSprites; // Different motivation images for each checkpoint
+    [SerializeField] private int numberOfCheckpoints = 4; // How many checkpoints (e.g., 4 = every 20%)
+
+    [Header("Final Countdown Settings")]
+    [SerializeField] private Font countdownFont; // Assign piepie.ttf in inspector
+
+    [Header("Position Settings")]
+    [SerializeField] private float positionUpdateInterval = 2f; // How often to request position from backend
+
+    [Header("References")]
+    [SerializeField] private MainGameManager gameManager;
 
     private VisualElement hudRoot;
     private Label distanceValue;
@@ -23,18 +33,32 @@ public class GameHUDController : MonoBehaviour
     private Label finalCountdownLabel;
     private VisualElement finalCountdownContainer;
 
+    // Position section
+    private VisualElement positionSection; // The container with background image
+    private Label positionLabel; // The "Position" label showing the number
+
     private float currentDistance = 0f;
     private float currentTime = 0f;
     private float timeRemaining = 300f;
     private bool isGameRunning = false;
 
-    // Automatic checkpoint tracking (at 1/3, 2/3 of distance)
-    private bool[] checkpointsReached = new bool[2]; // 2 checkpoints (33% and 66%)
+    // Automatic checkpoint tracking
+    private bool[] checkpointsReached;
     private Coroutine hideMotivationCoroutine;
 
     // Final countdown tracking
     private int lastDisplayedCountdown = -1;
     private const int COUNTDOWN_START_SECONDS = 10;
+
+    // Track last motivation sprite to avoid repetition
+    private int lastMotivationSpriteIndex = -1;
+
+    // Position tracking
+    private int currentPosition = -1; // -1 = unknown/hidden
+    private Coroutine positionRequestCoroutine;
+
+    // Tier thresholds - shows "Top X" when position is within this tier
+    private static readonly int[] positionTiers = { 1000, 500, 300, 200, 100, 50, 40, 30, 20, 10 };
 
     private void OnEnable()
     {
@@ -58,6 +82,16 @@ public class GameHUDController : MonoBehaviour
         progressFill = root.Q<VisualElement>("ProgressFill");
         distanceMarkers = root.Q<VisualElement>("DistanceMarkers");
         motivationTextImage = root.Q<VisualElement>("MotivationTextImage");
+
+        // Position section - the first child of Motivation is the position card
+        var motivation = root.Q<VisualElement>("Motivation");
+        if (motivation != null && motivation.childCount > 0)
+        {
+            positionSection = motivation[0]; // The card with background image
+        }
+        positionLabel = root.Q<Label>("Position");
+
+        Debug.Log($"[GameHUD] Position refs - section={positionSection != null}, label={positionLabel != null}, motivation={motivation != null}");
 
         if (distanceValue == null || timeValue == null || progressFill == null)
         {
@@ -89,6 +123,12 @@ public class GameHUDController : MonoBehaviour
         if (finalCountdownContainer != null)
         {
             finalCountdownContainer.style.display = DisplayStyle.None;
+        }
+
+        // Hide position section initially
+        if (positionSection != null)
+        {
+            positionSection.style.display = DisplayStyle.None;
         }
 
         // Update distance markers based on initial totalDistance
@@ -129,24 +169,38 @@ public class GameHUDController : MonoBehaviour
         currentTime = 0f;
         timeRemaining = timeLimit;
 
-        // Reset checkpoints
+        // Initialize and reset checkpoints array
+        checkpointsReached = new bool[numberOfCheckpoints];
         for (int i = 0; i < checkpointsReached.Length; i++)
         {
             checkpointsReached[i] = false;
         }
 
-        // Hide motivation image if visible
+        // Hide motivation image if visible and reset tracking
         HideMotivationImage();
+        lastMotivationSpriteIndex = -1;
 
         // Reset final countdown
         ResetFinalCountdown();
+
+        // Reset position section
+        currentPosition = -1;
+        if (positionSection != null)
+        {
+            positionSection.style.display = DisplayStyle.None;
+        }
+
+        // Start requesting position updates
+        StartPositionRequests();
 
         UpdateDistanceDisplay();
         UpdateTimeDisplay();
         UpdateProgressBar();
         ShowHUD();
 
-        Debug.Log($"[Game HUD] Game started - Time limit: {timeLimit}s, Checkpoints at {totalDistance / 3f:F0}m and {totalDistance * 2f / 3f:F0}m");
+        // Log checkpoint distances
+        float checkpointInterval = totalDistance / (numberOfCheckpoints + 1);
+        Debug.Log($"[Game HUD] Game started - Time limit: {timeLimit}s, {numberOfCheckpoints} checkpoints every {checkpointInterval:F0}m");
     }
 
     public void StopGame()
@@ -154,6 +208,7 @@ public class GameHUDController : MonoBehaviour
         isGameRunning = false;
         HideMotivationImage();
         HideFinalCountdown();
+        StopPositionRequests();
     }
 
     public void ShowHUD()
@@ -189,27 +244,28 @@ public class GameHUDController : MonoBehaviour
     }
 
     /// <summary>
-    /// Checks if player has reached any automatic checkpoint (1/3, 2/3 of distance)
+    /// Checks if player has reached any automatic checkpoint (evenly distributed along the route)
     /// </summary>
     private void CheckAutomaticCheckpoints()
     {
-        float checkpoint1Distance = totalDistance / 3f;      // 33%
-        float checkpoint2Distance = totalDistance * 2f / 3f; // 66%
+        if (checkpointsReached == null) return;
 
-        // Check first checkpoint (1/3)
-        if (!checkpointsReached[0] && currentDistance >= checkpoint1Distance)
-        {
-            checkpointsReached[0] = true;
-            OnCheckpointReached(0);
-            Debug.Log($"[GameHUD] Checkpoint 1 reached at {checkpoint1Distance:F0}m!");
-        }
+        // Checkpoints are evenly distributed (e.g., 4 checkpoints = 20%, 40%, 60%, 80%)
+        float checkpointInterval = totalDistance / (numberOfCheckpoints + 1);
 
-        // Check second checkpoint (2/3)
-        if (!checkpointsReached[1] && currentDistance >= checkpoint2Distance)
+        for (int i = 0; i < numberOfCheckpoints; i++)
         {
-            checkpointsReached[1] = true;
-            OnCheckpointReached(1);
-            Debug.Log($"[GameHUD] Checkpoint 2 reached at {checkpoint2Distance:F0}m!");
+            if (!checkpointsReached[i])
+            {
+                float checkpointDistance = checkpointInterval * (i + 1);
+                if (currentDistance >= checkpointDistance)
+                {
+                    checkpointsReached[i] = true;
+                    OnCheckpointReached(i);
+                    int percent = Mathf.RoundToInt((checkpointDistance / totalDistance) * 100f);
+                    Debug.Log($"[GameHUD] Checkpoint {i + 1}/{numberOfCheckpoints} reached at {checkpointDistance:F0}m ({percent}%)!");
+                }
+            }
         }
     }
 
@@ -259,8 +315,18 @@ public class GameHUDController : MonoBehaviour
         isGameRunning = false;
         Debug.Log($"Game Finished! Distance: {currentDistance}m, Time: {currentTime:F2}s");
 
-        // Show game over screen with results
-        GameOverController.ShowResults(currentTime, currentDistance);
+        // Notify MainGameManager to handle game over (sends MQTT to tablet)
+        if (gameManager != null)
+        {
+            bool completed = currentDistance >= totalDistance;
+            gameManager.TriggerGameOver(completed);
+        }
+        else
+        {
+            // Fallback: just show local game over screen
+            Debug.LogWarning("[GameHUD] No MainGameManager reference - tablet won't be notified!");
+            GameOverController.ShowResults(currentTime, currentDistance);
+        }
     }
 
     // Public getters
@@ -328,10 +394,30 @@ public class GameHUDController : MonoBehaviour
             StopCoroutine(hideMotivationCoroutine);
         }
 
-        // Set sprite if available
-        if (motivationSprites != null && checkpointIndex < motivationSprites.Length && motivationSprites[checkpointIndex] != null)
+        // Set sprite randomly from available sprites (avoid repeating the same one)
+        if (motivationSprites != null && motivationSprites.Length > 0)
         {
-            motivationTextImage.style.backgroundImage = new StyleBackground(motivationSprites[checkpointIndex]);
+            int spriteIndex;
+            if (motivationSprites.Length > 1)
+            {
+                // Pick a random index that's different from the last one
+                do
+                {
+                    spriteIndex = Random.Range(0, motivationSprites.Length);
+                } while (spriteIndex == lastMotivationSpriteIndex);
+            }
+            else
+            {
+                spriteIndex = 0;
+            }
+            lastMotivationSpriteIndex = spriteIndex;
+
+            if (motivationSprites[spriteIndex] != null)
+            {
+                motivationTextImage.style.backgroundImage = new StyleBackground(motivationSprites[spriteIndex]);
+                // Preserve aspect ratio - don't stretch
+                motivationTextImage.style.unityBackgroundScaleMode = ScaleMode.ScaleToFit;
+            }
         }
 
         // Show and animate
@@ -443,17 +529,23 @@ public class GameHUDController : MonoBehaviour
 
         finalCountdownLabel = new Label();
         finalCountdownLabel.name = "FinalCountdownLabel";
-        finalCountdownLabel.style.fontSize = 200;
-        finalCountdownLabel.style.color = new Color(1f, 0.2f, 0.2f, 1f); // Red color
+        finalCountdownLabel.style.fontSize = 240; // 20% bigger than original 200
+        finalCountdownLabel.style.color = Color.white; // Starts white, transitions to red
         finalCountdownLabel.style.unityFontStyleAndWeight = FontStyle.Bold;
-        finalCountdownLabel.style.unityTextOutlineWidth = 3;
-        finalCountdownLabel.style.unityTextOutlineColor = Color.black;
+        finalCountdownLabel.style.unityTextOutlineWidth = 4;
+        finalCountdownLabel.style.unityTextOutlineColor = new Color(0.8f, 0f, 0f, 1f); // Dark red outline
         finalCountdownLabel.style.textShadow = new TextShadow
         {
-            offset = new Vector2(4, 4),
-            blurRadius = 8,
-            color = new Color(0, 0, 0, 0.7f)
+            offset = new Vector2(8, 8), // Sharp offset for stacked look
+            blurRadius = 0, // No blur = sharp shadow
+            color = new Color(0.9f, 0.1f, 0.1f, 1f) // Red shadow
         };
+
+        // Apply custom font if assigned
+        if (countdownFont != null)
+        {
+            finalCountdownLabel.style.unityFont = countdownFont;
+        }
 
         finalCountdownContainer.Add(finalCountdownLabel);
         root.Add(finalCountdownContainer);
@@ -508,10 +600,18 @@ public class GameHUDController : MonoBehaviour
         // Make visible
         finalCountdownContainer.style.display = DisplayStyle.Flex;
 
-        // Color transition: more red as time runs out
+        // Color transition: white to red as time runs out
         float urgency = 1f - (number / (float)COUNTDOWN_START_SECONDS);
-        Color countdownColor = Color.Lerp(new Color(1f, 0.8f, 0.2f), new Color(1f, 0.1f, 0.1f), urgency);
+        Color countdownColor = Color.Lerp(Color.white, new Color(1f, 0.1f, 0.1f), urgency);
         finalCountdownLabel.style.color = countdownColor;
+
+        // Shadow gets more intense red as urgency increases
+        finalCountdownLabel.style.textShadow = new TextShadow
+        {
+            offset = new Vector2(8, 8),
+            blurRadius = 0,
+            color = Color.Lerp(new Color(0.7f, 0.1f, 0.1f, 0.8f), new Color(1f, 0f, 0f, 1f), urgency)
+        };
 
         // Scale animation: start big, shrink to normal
         finalCountdownLabel.style.scale = new Scale(new Vector3(1.5f, 1.5f, 1f));
@@ -566,5 +666,134 @@ public class GameHUDController : MonoBehaviour
     {
         lastDisplayedCountdown = -1;
         HideFinalCountdown();
+    }
+
+    // ========================================
+    // Position Section
+    // ========================================
+
+    /// <summary>
+    /// Starts periodic position requests from the leaderboard backend
+    /// </summary>
+    private void StartPositionRequests()
+    {
+        StopPositionRequests();
+        positionRequestCoroutine = StartCoroutine(PositionRequestLoop());
+        Debug.Log("[GameHUD] Position requests started");
+    }
+
+    /// <summary>
+    /// Stops position request coroutine and unsubscribes from events
+    /// </summary>
+    private void StopPositionRequests()
+    {
+        if (positionRequestCoroutine != null)
+        {
+            StopCoroutine(positionRequestCoroutine);
+            positionRequestCoroutine = null;
+        }
+
+        if (LeaderboardManager.Instance != null)
+        {
+            LeaderboardManager.Instance.OnPositionReceived -= OnPositionReceived;
+        }
+    }
+
+    /// <summary>
+    /// Periodically requests the player's leaderboard position
+    /// </summary>
+    private IEnumerator PositionRequestLoop()
+    {
+        // Wait a bit before the first request so we have some distance
+        yield return new WaitForSeconds(positionUpdateInterval);
+
+        while (isGameRunning)
+        {
+            // Re-subscribe each loop iteration to be robust against late initialization
+            if (LeaderboardManager.Instance != null)
+            {
+                LeaderboardManager.Instance.OnPositionReceived -= OnPositionReceived;
+                LeaderboardManager.Instance.OnPositionReceived += OnPositionReceived;
+
+                if (gameManager != null)
+                {
+                    LeaderboardManager.Instance.RequestPosition(currentDistance, gameManager.CurrentGameMode);
+                    Debug.Log($"[GameHUD] Requesting position for distance={currentDistance:F1}m, mode={gameManager.CurrentGameMode}");
+                }
+                else
+                {
+                    Debug.LogWarning("[GameHUD] Cannot request position - gameManager is null");
+                }
+            }
+            else
+            {
+                Debug.LogWarning("[GameHUD] Cannot request position - LeaderboardManager.Instance is null");
+            }
+
+            yield return new WaitForSeconds(positionUpdateInterval);
+        }
+    }
+
+    /// <summary>
+    /// Called when we receive a position response from the backend
+    /// </summary>
+    private void OnPositionReceived(int position)
+    {
+        UpdatePosition(position);
+    }
+
+    /// <summary>
+    /// Updates the position display based on the player's leaderboard position.
+    /// Shows tiered display: Top 1000, 500, 300, 200, 100, 50, 40, 30, 20, 10, then exact 9-1
+    /// </summary>
+    private void UpdatePosition(int position)
+    {
+        currentPosition = position;
+
+        if (positionSection == null || positionLabel == null)
+            return;
+
+        // Hide if position is unknown or beyond top 1000
+        if (position <= 0 || position > 1000)
+        {
+            positionSection.style.display = DisplayStyle.None;
+            return;
+        }
+
+        // Show the section
+        positionSection.style.display = DisplayStyle.Flex;
+
+        // For positions 1-10, show exact number
+        if (position <= 10)
+        {
+            positionLabel.text = position.ToString();
+        }
+        else
+        {
+            // Find the appropriate tier
+            // Tiers: 1000, 500, 300, 200, 100, 50, 40, 30, 20, 10
+            // If position <= tier, show that tier value
+            int displayValue = 1000; // default
+            for (int i = 0; i < positionTiers.Length; i++)
+            {
+                if (position <= positionTiers[i])
+                {
+                    displayValue = positionTiers[i];
+                }
+                else
+                {
+                    break;
+                }
+            }
+
+            positionLabel.text = displayValue.ToString();
+        }
+
+        Debug.Log($"[GameHUD] Position updated: {position} (displaying: {positionLabel.text})");
+    }
+
+    private void OnDisable()
+    {
+        StopPositionRequests();
     }
 }

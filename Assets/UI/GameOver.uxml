@@ -1,8 +1,13 @@
 <ui:UXML xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:ui="UnityEngine.UIElements" xmlns:uie="UnityEditor.UIElements" noNamespaceSchemaLocation="../../UIElementsSchema/UIElements.xsd" editor-extension-mode="False">
-    <ui:VisualElement name="GameOverRoot" style="flex-grow: 1; background-color: rgba(0, 0, 0, 0.95); align-items: center; justify-content: space-around; padding-left: 40px; padding-right: 40px;">
-        <ui:Image scale-mode="ScaleToFit" source="project://database/Assets/UI/Images/Group.png?fileID=2800000&amp;guid=c91902d40cb769a408747f2e71cf9fb9&amp;type=3#Group" style="background-image: none; height: 193px; width: 424px;"/>
-        <ui:VisualElement style="flex-grow: 1; align-content: flex-start; justify-content: space-around; height: auto;">
-            <ui:Image source="project://database/Assets/UI/Images/Frame%202147203207%20(1).png?fileID=2800000&amp;guid=f49f6a08d40336c4cb1fe7574fcf235f&amp;type=3#Frame 2147203207 (1)" style="height: 596px; width: 940px;"/>
+    <ui:VisualElement name="GameOverRoot" style="flex-grow: 1; background-color: rgba(0, 0, 0, 0); align-items: center; justify-content: space-around; padding-left: 40px; padding-right: 40px; padding-bottom: 20px; padding-top: 20px;">
+        <ui:Image scale-mode="ScaleToFit" source="project://database/Assets/UI/Images/Group.png?fileID=2800000&amp;guid=c91902d40cb769a408747f2e71cf9fb9&amp;type=3#Group" style="background-image: none; height: 193px; width: 424px; display: flex;"/>
+        <ui:Image source="" name="Victory" tint-color="rgba(0, 0, 0, 0.22)" style="position: absolute; height: 100%; top: -6px; width: 100%; left: 0; background-color: rgba(0, 0, 0, 0.22); margin-bottom: 0; padding-bottom: 0; display: flex;"/>
+        <ui:Image source="" name="GameOver" tint-color="rgba(255, 0, 0, 0.04)" style="position: absolute; height: 100%; top: 0; width: 100%; left: 0; background-color: rgba(255, 0, 0, 0.07); margin-bottom: 0; padding-bottom: 0; display: none;"/>
+        <ui:VisualElement name="WinContainer" style="flex-grow: 1; align-content: flex-start; justify-content: space-around; height: auto; display: flex;">
+            <ui:Image source="project://database/Assets/UI/Images/Frame%202147203207%20(1).png?fileID=2800000&amp;guid=f49f6a08d40336c4cb1fe7574fcf235f&amp;type=3#Frame 2147203207 (1)" name="Image" style="height: 596px; width: 940px;"/>
+        </ui:VisualElement>
+        <ui:VisualElement name="LoseContainer" style="flex-grow: 1; align-content: flex-start; justify-content: space-around; height: auto; display: none;">
+            <ui:Image source="project://database/Assets/UI/Images/Frame%2050.png?fileID=2800000&amp;guid=c057e4f72d0ae8544b65f438aeeedf0c&amp;type=3#Frame 50" style="height: 596px; width: 940px;"/>
         </ui:VisualElement>
         <ui:VisualElement style="flex-grow: 1;">
             <ui:VisualElement name="VisualElement" style="flex-grow: 1; width: auto; -unity-text-align: middle-center; align-items: center;">
@@ -12,10 +17,10 @@
                 <ui:Label text="000 m" name="DistanceResult" style="font-size: 150px; color: rgb(255, 255, 255); -unity-font-style: normal; background-image: url(&quot;project://database/Assets/UI/Images/distance.png?fileID=2800000&amp;guid=cbeb66bca1090d54eae56ec98b69a5fb&amp;type=3#distance&quot;); -unity-text-align: middle-center; height: 414px; width: 835px; padding-top: 80px; -unity-font-definition: url(&quot;project://database/Assets/UI/Fonts/piepie.ttf?fileID=12800000&amp;guid=7549b8d18081af448a475d20c153892e&amp;type=3#piepie&quot;);"/>
             </ui:VisualElement>
         </ui:VisualElement>
-        <ui:VisualElement style="flex-grow: 1; margin-top: 0;">
+        <ui:VisualElement name="WinContainer" style="flex-grow: 1; margin-top: 0; display: flex;">
             <ui:Label text="&#1578;&#1581;&#1602;&#1602; &#1605;&#1606; &#1606;&#1578;&#1575;&#1574;&#1580;&#1603; &#1593;&#1604;&#1609; &#1604;&#1608;&#1581;&#1577; &#1575;&#1604;&#1605;&#1578;&#1589;&#1583;&#1585;&#1610;&#1606;" name="LeaderboardArabic" style="font-size: 40px; color: rgb(220, 220, 220); margin-bottom: 5px; -unity-text-align: middle-center; white-space: normal; -unity-text-generator: advanced; -unity-font-definition: url(&quot;project://database/Assets/UI/Fonts/Syne-Bold.ttf?fileID=12800000&amp;guid=99a8c3a7a35db0d45b6b626b66e175b4&amp;type=3#Syne-Bold&quot;);"/>
             <ui:Label text="Check your scores on the Leaderboard" name="LeaderboardEnglish" style="font-size: 40px; color: rgb(220, 220, 220); -unity-text-align: middle-center; -unity-font-definition: url(&quot;project://database/Assets/UI/Fonts/Syne-Bold.ttf?fileID=12800000&amp;guid=99a8c3a7a35db0d45b6b626b66e175b4&amp;type=3#Syne-Bold&quot;);"/>
         </ui:VisualElement>
-        <ui:Image source="project://database/Assets/UI/Images/congrat%20ribbons.png?fileID=2800000&amp;guid=01c966e62c6335f41b63276b7bfe42f0&amp;type=3#congrat ribbons" style="position: absolute; height: 100%; top: -6px; width: 100%; left: 0;"/>
+        <ui:Image source="project://database/Assets/UI/Images/congrat%20ribbons.png?fileID=2800000&amp;guid=01c966e62c6335f41b63276b7bfe42f0&amp;type=3#congrat ribbons" name="Victory" style="position: absolute; height: 100%; top: -6px; width: 100%; left: 0; display: flex;"/>
     </ui:VisualElement>
 </ui:UXML>

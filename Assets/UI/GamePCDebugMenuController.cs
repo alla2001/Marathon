@@ -8,6 +8,7 @@ public class GamePCDebugMenuController : MonoBehaviour
     [SerializeField] private UIDocument uiDocument;
     [SerializeField] private GamePCIdleController idleController;
     [SerializeField] private MainGameManager gameManager;
+    [SerializeField] private MachineDataHandler machineDataHandler;
 
     [Header("Gesture Settings")]
     [SerializeField] private int requiredFingers = 3;
@@ -43,6 +44,10 @@ public class GamePCDebugMenuController : MonoBehaviour
     private Button cyclingButton;
     private Label selectedModeLabel;
     private string currentGameMode = "rowing";
+
+    // Machine Topic UI Elements
+    private TextField machineTopicInput;
+    private Label currentMachineTopicLabel;
 
     // Gesture detection
     private int currentTapCount = 0;
@@ -89,6 +94,10 @@ public class GamePCDebugMenuController : MonoBehaviour
         cyclingButton = root.Q<Button>("CyclingButton");
         selectedModeLabel = root.Q<Label>("SelectedModeLabel");
 
+        // Get Machine Topic elements
+        machineTopicInput = root.Q<TextField>("MachineTopicInput");
+        currentMachineTopicLabel = root.Q<Label>("CurrentMachineTopicLabel");
+
         // Register button callbacks
         if (connectButton != null) connectButton.clicked += OnConnectClicked;
         if (disconnectButton != null) disconnectButton.clicked += OnDisconnectClicked;
@@ -99,6 +108,9 @@ public class GamePCDebugMenuController : MonoBehaviour
         if (rowingButton != null) rowingButton.clicked += () => SelectGameMode("rowing");
         if (runningButton != null) runningButton.clicked += () => SelectGameMode("running");
         if (cyclingButton != null) cyclingButton.clicked += () => SelectGameMode("cycling");
+
+        // Register machine topic input callback
+        if (machineTopicInput != null) machineTopicInput.RegisterValueChangedCallback(OnMachineTopicChanged);
 
         // Register Unity log callback
         Application.logMessageReceived += OnLogMessageReceived;
@@ -125,6 +137,7 @@ public class GamePCDebugMenuController : MonoBehaviour
         if (disconnectButton != null) disconnectButton.clicked -= OnDisconnectClicked;
         if (closeButton != null) closeButton.clicked -= CloseDebugMenu;
         if (clearLogButton != null) clearLogButton.clicked -= ClearLogs;
+        if (machineTopicInput != null) machineTopicInput.UnregisterValueChangedCallback(OnMachineTopicChanged);
 
         // Unregister Unity log callback
         Application.logMessageReceived -= OnLogMessageReceived;
@@ -376,7 +389,21 @@ public class GamePCDebugMenuController : MonoBehaviour
         // Apply game mode to dependent systems
         ApplyGameMode(currentGameMode);
 
-        Debug.Log($"[Game PC Debug Menu] Loaded game mode: {currentGameMode}");
+        // Load machine topic from PlayerPrefs
+        string savedMachineTopic = PlayerPrefs.GetString("GamePC_MachineTopic", "");
+        if (machineTopicInput != null) machineTopicInput.value = savedMachineTopic;
+
+        // Apply machine topic to MachineDataHandler
+        if (machineDataHandler != null)
+        {
+            machineDataHandler.SetCustomTopic(savedMachineTopic);
+            machineDataHandler.SetGameMode(currentGameMode);
+        }
+
+        // Update current topic label
+        UpdateCurrentTopicLabel();
+
+        Debug.Log($"[Game PC Debug Menu] Loaded game mode: {currentGameMode}, machine topic: {(string.IsNullOrEmpty(savedMachineTopic) ? "(auto)" : savedMachineTopic)}");
     }
 
     private void ApplyGameMode(string mode)
@@ -397,6 +424,15 @@ public class GamePCDebugMenuController : MonoBehaviour
         {
             gameManager.UpdateMeshGenerators(mode);
         }
+
+        // Update MachineDataHandler game mode (will resubscribe to correct topic)
+        if (machineDataHandler != null)
+        {
+            machineDataHandler.SetGameMode(mode);
+        }
+
+        // Update current topic label
+        UpdateCurrentTopicLabel();
     }
 
     private void SaveSettings()
@@ -413,6 +449,7 @@ public class GamePCDebugMenuController : MonoBehaviour
         PlayerPrefs.SetString("GamePC_MQTT_Username", usernameInput.value);
         PlayerPrefs.SetString("GamePC_MQTT_Password", passwordInput.value);
         PlayerPrefs.SetString("GamePC_GameMode", currentGameMode);
+        if (machineTopicInput != null) PlayerPrefs.SetString("GamePC_MachineTopic", machineTopicInput.value);
         PlayerPrefs.Save();
 
         Debug.Log("[Game PC Debug Menu] Settings saved");
@@ -525,6 +562,56 @@ public class GamePCDebugMenuController : MonoBehaviour
         {
             logContainer.Clear();
             Debug.Log("[Game PC Debug Menu] Logs cleared");
+        }
+    }
+
+    private void OnMachineTopicChanged(ChangeEvent<string> evt)
+    {
+        string customTopic = evt.newValue;
+
+        // Update MachineDataHandler
+        if (machineDataHandler != null)
+        {
+            machineDataHandler.SetCustomTopic(customTopic);
+        }
+
+        // Update the current topic label
+        UpdateCurrentTopicLabel();
+
+        // Save settings
+        PlayerPrefs.SetString("GamePC_MachineTopic", customTopic);
+        PlayerPrefs.Save();
+
+        Debug.Log($"[Game PC Debug Menu] Machine topic changed to: {(string.IsNullOrEmpty(customTopic) ? "(auto)" : customTopic)}");
+    }
+
+    private void UpdateCurrentTopicLabel()
+    {
+        if (currentMachineTopicLabel == null)
+            return;
+
+        string currentTopic = "";
+        if (machineDataHandler != null)
+        {
+            currentTopic = machineDataHandler.GetCurrentTopic();
+        }
+
+        if (string.IsNullOrEmpty(currentTopic))
+        {
+            // Show what the default would be
+            int stationId = MQTTManager.Instance != null ? MQTTManager.Instance.StationId : 1;
+            currentTopic = currentGameMode.ToLower() switch
+            {
+                "rowing" => $"rowing_{stationId}/pulse",
+                "running" => $"treadmill_{stationId}/pulse",
+                "cycling" => $"cycle_{stationId}/pulse",
+                _ => $"treadmill_{stationId}/pulse"
+            };
+            currentMachineTopicLabel.text = $"Default: {currentTopic}";
+        }
+        else
+        {
+            currentMachineTopicLabel.text = $"Current: {currentTopic}";
         }
     }
 }

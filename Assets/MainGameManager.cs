@@ -364,10 +364,11 @@ public class MainGameManager : MonoBehaviour
             splineController.StartGameplay();
         }
 
-        // Set machine handler game mode
+        // Set machine handler game mode and reset distance
         if (machineHandler != null)
         {
             machineHandler.SetGameMode(currentGameMode);
+            machineHandler.ResetDistance();
         }
 
         // Show HUD

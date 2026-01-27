@@ -17,6 +17,7 @@ public class TabletPlayAgainController : MonoBehaviour
     [SerializeField] private Texture2D runningLandingImageArabic;
     [SerializeField] private Texture2D cyclingLandingImageArabic;
 
+
     private Label gameModeTitle;
     private Button playAgainButton;
     private Button goHomeButton;
@@ -28,6 +29,12 @@ public class TabletPlayAgainController : MonoBehaviour
     private List<VisualElement> loseContainers = new List<VisualElement>();
     private List<Label> resultTimeLabels = new List<Label>();
     private List<Label> resultDistanceLabels = new List<Label>();
+
+    // Win/Lose title labels (separate English/Arabic)
+    private Label winLabelEng;
+    private Label winLabelArb;
+    private Label loseLabelEng;
+    private Label loseLabelArb;
 
     private string currentGameMode = "ROWING";
     private bool lastGameWon = false;
@@ -54,6 +61,12 @@ public class TabletPlayAgainController : MonoBehaviour
         goHomeButton = root.Q<Button>("GoHomeButton");
         landingImage = root.Q<Image>("Landing-Image");
         languageButton = root.Q<Button>("LanguageButton");
+
+        // Get Win/Lose title labels (separate English/Arabic)
+        winLabelEng = root.Q<Label>("WinLabelEng");
+        winLabelArb = root.Q<Label>("WinLabelArb");
+        loseLabelEng = root.Q<Label>("LoseLabelEng");
+        loseLabelArb = root.Q<Label>("LoseLabelArb");
 
         // Get ALL Win/Lose containers with any of these names
         winContainers = FindAllElementsWithNames(root, "WinContainer", "WinScreen", "Victory", "Win", "WinPanel");
@@ -285,6 +298,17 @@ public class TabletPlayAgainController : MonoBehaviour
 
         // Update landing image for current language
         UpdateLandingImage();
+
+        // Update Win/Lose title text based on language
+        UpdateTitleLabels();
+    }
+
+    private void UpdateTitleLabels()
+    {
+        if (winLabelEng != null) winLabelEng.style.display = isArabic ? DisplayStyle.None : DisplayStyle.Flex;
+        if (winLabelArb != null) winLabelArb.style.display = isArabic ? DisplayStyle.Flex : DisplayStyle.None;
+        if (loseLabelEng != null) loseLabelEng.style.display = isArabic ? DisplayStyle.None : DisplayStyle.Flex;
+        if (loseLabelArb != null) loseLabelArb.style.display = isArabic ? DisplayStyle.Flex : DisplayStyle.None;
     }
 
     /// <summary>

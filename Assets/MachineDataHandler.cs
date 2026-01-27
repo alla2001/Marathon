@@ -24,6 +24,7 @@ public class MachineDataHandler : MonoBehaviour
 
     private string currentTopic = "";
     private int stationId = 1;
+    private float localDistance = 0f; // Distance calculated locally from speed
 
     private void Start()
     {
@@ -143,8 +144,8 @@ public class MachineDataHandler : MonoBehaviour
         if (playerController == null)
             return;
 
-        // Treadmill sends speed as integer (km/h * 100), so divide by 100 first
-        float speedKmh = data.speed_kmh / 100f;
+        // Speed comes in as km/h (e.g. 18.08)
+        float speedKmh = data.speed_kmh;
 
         // Convert speed from km/h to m/s (divide by 3.6)
         float speedMs = speedKmh / 3.6f;
@@ -158,14 +159,19 @@ public class MachineDataHandler : MonoBehaviour
             gameManager.OnMachineDataReceived();
         }
 
-        // Update player controller with speed
-        playerController.SetMachineSpeed(adjustedSpeed);
+        // Calculate distance locally from speed and delta time
+        float deltaSeconds = data.dt_ms / 1000f;
+        if (deltaSeconds > 0f && adjustedSpeed > 0f)
+        {
+            localDistance += adjustedSpeed * deltaSeconds;
+        }
 
-        // Use treadmill's distance directly (more accurate than calculating from speed)
-        playerController.SetMachineDistance(data.distance_m);
+        // Update player controller with speed and locally calculated distance
+        playerController.SetMachineSpeed(adjustedSpeed);
+        playerController.SetMachineDistance(localDistance);
 
         // Log for debugging
-        Debug.Log($"[MachineDataHandler] Device: {data.device}, Speed: {speedMs:F2} m/s ({speedKmh:F2} km/h), Distance: {data.distance_m:F2}m, Pulse: {data.pulse}");
+        Debug.Log($"[MachineDataHandler] Device: {data.device}, Speed: {speedMs:F2} m/s ({speedKmh:F2} km/h), LocalDist: {localDistance:F2}m, Pulse: {data.pulse}");
     }
 
     // For manual testing without machine
@@ -205,6 +211,15 @@ public class MachineDataHandler : MonoBehaviour
     {
         useMachineData = enable;
         Debug.Log($"[MachineDataHandler] Machine input {(enable ? "enabled" : "disabled")}");
+    }
+
+    /// <summary>
+    /// Resets the locally calculated distance (call when starting a new game)
+    /// </summary>
+    public void ResetDistance()
+    {
+        localDistance = 0f;
+        Debug.Log("[MachineDataHandler] Local distance reset");
     }
 
     /// <summary>

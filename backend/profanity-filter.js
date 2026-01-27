@@ -44,9 +44,57 @@ const ARABIC_WORDS = [
   'كس اخت', 'روح انتاك', 'لك كسك',
 ];
 
+// Franco-Arab (Arabic profanity written in Latin/transliterated)
+const FRANCO_ARAB_WORDS = [
+  // Kos / Kuss variants
+  'kos', 'koss', 'kus', 'kuss', 'kosomak', 'kos omak', 'kos ommak',
+  'kus omak', 'kus ommak', 'kosomk', 'kos okhtak', 'kos okhtk',
+  'kus ukhtak', 'kusomak',
+  // Sharmouta variants
+  'sharmouta', 'sharmou6a', 'sharmuta', 'sharmoota', 'sharmonta',
+  'charmou6a', 'charmuta', 'charmouta',
+  // A7a / Ayre variants
+  'a7a', 'ah7a', 'ayre', 'ayri', 'ayree', 'airi', 'airee', 'eyre', 'eyri',
+  'ayr', 'air',
+  // Zeb / Zob variants
+  'zeb', 'zob', 'zebi', 'zobi', 'zb', 'zeby', 'zoby',
+  // Teez variants
+  'teez', 'tiz', 'tez', '6eez', '6iz', 'teeze',
+  // Nik / Neek variants
+  'nik', 'neek', 'naik', 'nayek', 'niik', 'neik', 'n1k',
+  'nikak', 'nikomak',
+  // Khawal / Gay slurs
+  'khawal', '5awal', 'khwal', '5wal', 'khanee8', 'khanees', 'khanith',
+  // Kalb / animal insults
+  'ibn elkalb', 'ibn il kalb', 'ibn alkalb', 'ya kalb', 'ya 7mar',
+  'ya 7ayawan', 'ya 5anzeir', 'ya 5anzeer', 'ibn el sharmouta',
+  'ibn il sharmuta',
+  // Wiskh / dirty
+  'ya wiskh', 'ya wisikh', 'weskh', 'wisikh',
+  // M words
+  'manyak', 'manyok', 'manyook', 'manyo2', 'manyake',
+  'metnak', 'mitnak', 'metnaak', 'mitnaaak',
+  '3ars', '3ers', 'mo3ras', 'mo3res', 'm3rs',
+  // Khara variants
+  'khara', '5ara', 'khra', '5ra', 'khary',
+  // Ga7ba / Q7ba
+  'ga7ba', 'qa7ba', 'qahba', 'gahba', 'kahba', 'ka7ba',
+  // Dayouth
+  'dayouth', 'dayoos', 'dayyoos', 'dayoo8', 'dayo8',
+  // General
+  'ibn haram', 'ibn el haram', 'ibn alharam',
+  'ya 3ar', 'ya shar', 'ya zbalah',
+  'laa3', 'la3an', 'yel3an',
+  'ta7an', 'metnaka', 'mitnaka',
+  'rooh entak', 'roo7 intak', 'roo7 entak',
+  // Common short franco
+  'aks', 'ya ars', 'ya 3rs',
+];
+
 // Build lookup sets for fast matching
 const englishSet = new Set(ENGLISH_WORDS.map(w => w.toLowerCase()));
 const arabicSet = new Set(ARABIC_WORDS);
+const francoSet = new Set(FRANCO_ARAB_WORDS.map(w => w.toLowerCase()));
 
 /**
  * Check if a username contains profanity.
@@ -84,7 +132,26 @@ function checkProfanity(username) {
     }
   }
 
-  // Check Arabic - substring match
+  // Check Franco-Arab (Latin transliteration) - substring match
+  // Also normalize 7→h, 3→a, 5→kh, 6→t, 8→q, 2→a for franco number substitutions
+  const francoNormalized = lower
+    .replace(/7/g, 'h')
+    .replace(/3/g, 'a')
+    .replace(/5/g, 'kh')
+    .replace(/6/g, 't')
+    .replace(/8/g, 'q')
+    .replace(/2/g, 'a');
+
+  for (const word of francoSet) {
+    if (word.length >= 3 && (lower.includes(word) || francoNormalized.includes(word))) {
+      return { isProfane: true, reason: 'inappropriate language detected' };
+    }
+    if (word.length < 3 && (lower === word || francoNormalized === word)) {
+      return { isProfane: true, reason: 'inappropriate language detected' };
+    }
+  }
+
+  // Check Arabic script - substring match
   const trimmed = username.trim();
   for (const word of arabicSet) {
     if (trimmed.includes(word)) {

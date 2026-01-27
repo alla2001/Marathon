@@ -1,7 +1,8 @@
 {
   "permissions": {
     "allow": [
-      "Bash(timeout:*)"
+      "Bash(timeout:*)",
+      "WebFetch(domain:raw.githubusercontent.com)"
     ]
   }
 }

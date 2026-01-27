@@ -1,6 +1,7 @@
 const mqtt = require('mqtt');
 const fs = require('fs');
 const path = require('path');
+const { checkProfanity } = require('./profanity-filter');
 
 // ============================================
 // Load MQTT Settings (shared with main server)
@@ -270,6 +271,19 @@ function handleCheckUsername(payload, responseTopic) {
   }
 
   try {
+    // Check profanity first — treat as "not unique" if profane
+    const profanityResult = checkProfanity(username);
+    if (profanityResult.isProfane) {
+      console.log(`[Filter] Username "${username}" blocked by profanity filter`);
+      publishResponse(responseTopic, {
+        success: true,
+        username,
+        isUnique: false,
+        exists: true
+      });
+      return;
+    }
+
     const exists = !!findEntryByUsername(username);
 
     console.log(`[DB] Username "${username}" ${exists ? 'EXISTS' : 'is UNIQUE'}`);

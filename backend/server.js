@@ -1,6 +1,7 @@
 const mqtt = require('mqtt');
 const fs = require('fs');
 const path = require('path');
+const { checkProfanity } = require('./profanity-filter');
 
 // ============================================
 // Load MQTT Settings
@@ -548,6 +549,21 @@ function handleCheckUsername(payload) {
   }
 
   try {
+    // Check profanity first — treat as "not unique" if profane
+    const profanityResult = checkProfanity(username);
+    if (profanityResult.isProfane) {
+      console.log(`[Filter] Username "${username}" blocked by profanity filter`);
+      publishResponse(responseTopic, {
+        success: true,
+        username,
+        isUnique: false,
+        exists: true,
+        existsIn: [],
+        stationId
+      });
+      return;
+    }
+
     // Check across all game modes or specific mode
     let exists = false;
     let existsIn = [];

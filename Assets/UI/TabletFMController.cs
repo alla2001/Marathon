@@ -4,10 +4,12 @@ using System.Collections;
 
 /// <summary>
 /// Controller for the FM Registration Tablet
-/// - User enters name
-/// - Validates against FM leaderboard (different from game leaderboard)
-/// - If username exists, can't press Start
-/// - On Start, shows success popup
+/// Flow:
+/// 1. User enters name, presses Play -> register in leaderboard (don't send name on MQTT yet)
+/// 2. Show "Success!" popup for 4 seconds
+/// 3. Show "Are you Ready?" popup with Start Game button
+/// 4. User presses Start Game -> send name on MQTT -> show "Please Wait!"
+/// 5. Wait for "Game Idle" status -> hide popup, reset form
 /// </summary>
 public class TabletFMController : MonoBehaviour
 {
@@ -18,11 +20,7 @@ public class TabletFMController : MonoBehaviour
     [SerializeField] private float usernameCheckDelay = 0.5f;
 
     [Header("Popup Settings")]
-    [SerializeField] private float popupDisplayDuration = 3f;
-    [SerializeField] private string successMessageEnglish = "Success!";
-    [SerializeField] private string successMessageArabic = "تم بنجاح!";
-    [SerializeField] private string popupDescriptionEnglish = "User can go into the wheel and start the next steps";
-    [SerializeField] private string popupDescriptionArabic = "يمكن للمشارك الدخول إلى العجلة والبدء باللعب.";
+    [SerializeField] private float successDisplayDuration = 4f;
     [SerializeField] private string usernameTakenMessageEnglish = "Username already registered";
     [SerializeField] private string usernameTakenMessageArabic = "اسم المستخدم مسجل مسبقاً";
 
@@ -46,19 +44,23 @@ public class TabletFMController : MonoBehaviour
     [SerializeField] private string startButtonArabic = "ابدأ";
     [SerializeField] private string termsArabic = "أنت تتحمل كامل المسؤولية عن جميع المخاطر الناشئة عن استخدام أو التعامل مع أو التواجد بالقرب من المعدات الرياضية في الفعالية، وتوافق على تعويض وإبراء ذمة منظمي الفعالية والمكان والرعاة ومزوّدي التطبيقات من أي مطالبات أو مسؤوليات ذات صلة، وذلك بالقدر الذي يسمح به القانون، ما لم يكن ذلك محظوراً بموجب القانون";
 
+    // Form UI
     private Button startButton;
     private Button languageButton;
     private TextField nameInput;
     private Toggle termsToggle;
-    private VisualElement popup;
-    private Label popupTitleLabel;
-    private Label popupDescriptionLabel;
     private Label validationLabel;
-    private Button popupCloseButton;
     private Label inputLabel;
     private Label termsLabel;
     private Label descriptionLabel;
     private VisualElement rootContainer;
+
+    // Popup containers
+    private VisualElement popup;
+    private VisualElement successPanel;
+    private VisualElement areYouReadyPanel;
+    private VisualElement gameInProgressPanel;
+    private Button startGameButton; // Button inside "Are you Ready?" panel
 
     private StyleBackground originalButtonImage;
     private bool isArabic = false;
@@ -68,14 +70,15 @@ public class TabletFMController : MonoBehaviour
     private bool isCheckingUsername = false;
     private string lastCheckedUsername = "";
     private Coroutine usernameCheckCoroutine;
-    private Coroutine hidePopupCoroutine;
+    private Coroutine popupFlowCoroutine;
+
+    // Stored player name for the popup flow
+    private string pendingPlayerName = "";
 
     private void OnEnable()
     {
         if (uiDocument == null)
-        {
             uiDocument = GetComponent<UIDocument>();
-        }
 
         if (uiDocument == null)
         {
@@ -86,60 +89,60 @@ public class TabletFMController : MonoBehaviour
         var root = uiDocument.rootVisualElement;
         rootContainer = root.Q<VisualElement>("RootContainer");
 
-        // Get UI elements
+        // Form elements
         startButton = root.Q<Button>("StartButton");
         languageButton = root.Q<Button>("LanguageButton");
         nameInput = root.Q<TextField>("NameInput");
         termsToggle = root.Q<Toggle>("TermsToggle");
-        popup = root.Q<VisualElement>("Popup");
 
-        // Find DescriptionLine1 labels (there are two - first is description, second is terms)
+        // Find DescriptionLine1 labels
         var descriptionLabels = root.Query<Label>("DescriptionLine1").ToList();
         if (descriptionLabels.Count > 0)
-        {
-            descriptionLabel = descriptionLabels[0]; // First one is the main description
-        }
+            descriptionLabel = descriptionLabels[0];
+        if (descriptionLabels.Count > 1)
+            termsLabel = descriptionLabels[1];
 
         // Find labels in UserNameArea
         var userNameArea = root.Q<VisualElement>("UserNameArea");
         if (userNameArea != null)
         {
             var labels = userNameArea.Query<Label>().ToList();
-            if (labels.Count > 0)
-            {
-                inputLabel = labels[0]; // First label is "Enter your name..."
-            }
-            if (labels.Count > 1)
-            {
-                validationLabel = labels[1]; // Second label is the validation message
-            }
+            if (labels.Count > 0) inputLabel = labels[0];
+            if (labels.Count > 1) validationLabel = labels[1];
         }
 
-        // Terms label is the second DescriptionLine1 (already queried above)
-        if (descriptionLabels.Count > 1)
+        // Popup elements
+        popup = root.Q<VisualElement>("Popup");
+        successPanel = root.Q<VisualElement>("Success");
+        areYouReadyPanel = root.Q<VisualElement>("areyouready");
+        gameInProgressPanel = root.Q<VisualElement>("gameinprogress");
+
+        // Find Start Game button inside areyouready panel
+        if (areYouReadyPanel != null)
         {
-            termsLabel = descriptionLabels[1]; // Second DescriptionLine1 is the terms
+            startGameButton = areYouReadyPanel.Q<Button>();
+            if (startGameButton != null)
+            {
+                startGameButton.clicked += OnStartGameClicked;
+            }
         }
 
-        // Setup popup content
-        SetupPopup();
+        // Hide popup and all panels initially
+        HideAllPopupPanels();
+        if (popup != null) popup.style.display = DisplayStyle.None;
 
-        // Register button callbacks
+        // Register form callbacks
         if (startButton != null)
         {
             originalButtonImage = startButton.style.backgroundImage;
-            startButton.clicked += OnStartButtonClicked;
+            startButton.clicked += OnPlayButtonClicked;
         }
 
         if (languageButton != null)
-        {
             languageButton.clicked += OnLanguageButtonClicked;
-        }
 
         if (termsToggle != null)
-        {
             termsToggle.RegisterValueChangedCallback(evt => UpdateStartButtonState());
-        }
 
         if (nameInput != null)
         {
@@ -147,97 +150,47 @@ public class TabletFMController : MonoBehaviour
 
             nameInput.RegisterCallback<FocusInEvent>(evt =>
             {
-                // Clear placeholder in both languages
                 if (nameInput.value == namePlaceholderEnglish || nameInput.value == namePlaceholderArabic)
-                {
                     nameInput.value = "";
-                }
             });
 
             nameInput.RegisterValueChangedCallback(evt => OnUsernameChanged(evt.newValue));
         }
 
-        // Set initial button state
         UpdateStartButtonState();
-
         Debug.Log("[TabletFMController] Initialized");
     }
 
     private void Start()
     {
-        // Subscribe to FMLeaderboardManager events
         if (FMLeaderboardManager.Instance != null)
         {
             FMLeaderboardManager.Instance.OnUsernameCheckResult += OnUsernameCheckResult;
             FMLeaderboardManager.Instance.OnRegistrationResult += OnRegistrationResult;
+            FMLeaderboardManager.Instance.OnGameStatusReceived += OnGameStatusReceived;
             Debug.Log("[TabletFMController] Subscribed to FMLeaderboardManager");
         }
         else
         {
-            Debug.LogWarning("[TabletFMController] FMLeaderboardManager not found - username checks will assume unique");
+            Debug.LogWarning("[TabletFMController] FMLeaderboardManager not found");
         }
     }
 
     private void OnDisable()
     {
-        if (startButton != null)
-        {
-            startButton.clicked -= OnStartButtonClicked;
-        }
-
-        if (languageButton != null)
-        {
-            languageButton.clicked -= OnLanguageButtonClicked;
-        }
-
-        if (popupCloseButton != null)
-        {
-            popupCloseButton.clicked -= HidePopup;
-        }
+        if (startButton != null) startButton.clicked -= OnPlayButtonClicked;
+        if (languageButton != null) languageButton.clicked -= OnLanguageButtonClicked;
+        if (startGameButton != null) startGameButton.clicked -= OnStartGameClicked;
 
         if (FMLeaderboardManager.Instance != null)
         {
             FMLeaderboardManager.Instance.OnUsernameCheckResult -= OnUsernameCheckResult;
             FMLeaderboardManager.Instance.OnRegistrationResult -= OnRegistrationResult;
+            FMLeaderboardManager.Instance.OnGameStatusReceived -= OnGameStatusReceived;
         }
 
-        if (usernameCheckCoroutine != null)
-        {
-            StopCoroutine(usernameCheckCoroutine);
-        }
-
-        if (hidePopupCoroutine != null)
-        {
-            StopCoroutine(hidePopupCoroutine);
-        }
-    }
-
-    // ========================================
-    // Popup Setup
-    // ========================================
-    private void SetupPopup()
-    {
-        if (popup == null)
-        {
-            Debug.LogWarning("[TabletFMController] Popup element not found!");
-            return;
-        }
-
-        // Find existing elements in the popup by name (from UXML)
-        popupTitleLabel = popup.Q<Label>("PopupTitle");
-        popupDescriptionLabel = popup.Q<Label>("PopupDescription");
-        popupCloseButton = popup.Q<Button>("PopupCloseButton");
-
-        // Wire up close button
-        if (popupCloseButton != null)
-        {
-            popupCloseButton.clicked += HidePopup;
-        }
-
-        // Ensure popup starts hidden
-        popup.style.display = DisplayStyle.None;
-
-        Debug.Log("[TabletFMController] Popup setup complete - using existing UXML popup");
+        if (usernameCheckCoroutine != null) StopCoroutine(usernameCheckCoroutine);
+        if (popupFlowCoroutine != null) StopCoroutine(popupFlowCoroutine);
     }
 
     // ========================================
@@ -255,9 +208,7 @@ public class TabletFMController : MonoBehaviour
         UpdateValidationLabel();
 
         if (usernameCheckCoroutine != null)
-        {
             StopCoroutine(usernameCheckCoroutine);
-        }
 
         if (!string.IsNullOrWhiteSpace(newUsername) && newUsername != "Name")
         {
@@ -283,7 +234,6 @@ public class TabletFMController : MonoBehaviour
         }
         else
         {
-            // No manager, assume unique
             isUsernameUnique = true;
             isCheckingUsername = false;
             lastCheckedUsername = username;
@@ -295,10 +245,7 @@ public class TabletFMController : MonoBehaviour
     private void OnUsernameCheckResult(bool isUnique, string username)
     {
         string currentUsername = nameInput?.value ?? "";
-        if (username != currentUsername)
-        {
-            return;
-        }
+        if (username != currentUsername) return;
 
         isUsernameUnique = isUnique;
         isCheckingUsername = false;
@@ -319,24 +266,23 @@ public class TabletFMController : MonoBehaviour
 
         if (string.IsNullOrWhiteSpace(currentUsername) || isPlaceholder)
         {
-            // Default validation message
             validationLabel.text = isArabic ? validationDefaultArabic : validationDefaultEnglish;
-            validationLabel.style.color = new Color(1f, 1f, 1f, 1f); // White
+            validationLabel.style.color = new Color(1f, 1f, 1f, 1f);
         }
         else if (isCheckingUsername)
         {
             validationLabel.text = isArabic ? checkingArabic : checkingEnglish;
-            validationLabel.style.color = new Color(1f, 0.8f, 0.2f, 1f); // Yellow
+            validationLabel.style.color = new Color(1f, 0.8f, 0.2f, 1f);
         }
         else if (!isUsernameUnique)
         {
             validationLabel.text = isArabic ? usernameTakenMessageArabic : usernameTakenMessageEnglish;
-            validationLabel.style.color = new Color(1f, 0.3f, 0.3f, 1f); // Red
+            validationLabel.style.color = new Color(1f, 0.3f, 0.3f, 1f);
         }
         else
         {
             validationLabel.text = isArabic ? usernameAvailableArabic : usernameAvailableEnglish;
-            validationLabel.style.color = new Color(0.3f, 1f, 0.3f, 1f); // Green
+            validationLabel.style.color = new Color(0.3f, 1f, 0.3f, 1f);
         }
     }
 
@@ -362,9 +308,7 @@ public class TabletFMController : MonoBehaviour
         if (enabled)
         {
             if (buttonActiveImage != null)
-            {
                 startButton.style.backgroundImage = new StyleBackground(buttonActiveImage);
-            }
             startButton.style.opacity = 1f;
             startButton.SetEnabled(true);
         }
@@ -377,36 +321,136 @@ public class TabletFMController : MonoBehaviour
     }
 
     // ========================================
-    // Button Clicks
+    // Play Button (Step 1: Register, show Success)
     // ========================================
-    private void OnStartButtonClicked()
+    private void OnPlayButtonClicked()
     {
         if (!IsStartButtonEnabled())
         {
-            Debug.Log("[TabletFMController] Start button clicked but conditions not met");
+            Debug.Log("[TabletFMController] Play button clicked but conditions not met");
             return;
         }
 
-        string playerName = nameInput?.value ?? "";
+        pendingPlayerName = nameInput?.value ?? "";
 
-        Debug.Log($"[TabletFMController] Registering user: {playerName}");
+        Debug.Log($"[TabletFMController] Registering user: {pendingPlayerName}");
 
-        // Register with FM leaderboard
+        // Register in leaderboard (store name) but DON'T send on MQTT yet
         if (FMLeaderboardManager.Instance != null)
         {
-            FMLeaderboardManager.Instance.RegisterUser(playerName);
+            FMLeaderboardManager.Instance.RegisterUser(pendingPlayerName);
         }
 
-        // Show success popup immediately
-        ShowSuccessPopup();
+        // Reset the form immediately
+        ResetForm();
+
+        // Start the popup flow: Success -> Are you Ready? -> Please Wait
+        if (popupFlowCoroutine != null) StopCoroutine(popupFlowCoroutine);
+        popupFlowCoroutine = StartCoroutine(PopupFlowCoroutine());
+    }
+
+    // ========================================
+    // Popup Flow
+    // ========================================
+    private IEnumerator PopupFlowCoroutine()
+    {
+        // Step 1: Show Success for 4 seconds
+        ShowPopupPanel(successPanel);
+        Debug.Log("[TabletFMController] Showing Success popup");
+
+        yield return new WaitForSeconds(successDisplayDuration);
+
+        // Step 2: Show "Are you Ready?" and wait for Start Game button
+        ShowPopupPanel(areYouReadyPanel);
+        Debug.Log("[TabletFMController] Showing Are You Ready popup");
+
+        // Flow continues when OnStartGameClicked is called
+    }
+
+    // ========================================
+    // Start Game Button (Step 2: Send name, show Please Wait)
+    // ========================================
+    private void OnStartGameClicked()
+    {
+        Debug.Log($"[TabletFMController] Start Game clicked, sending name: {pendingPlayerName}");
+
+        // NOW send the name on MQTT
+        if (FMLeaderboardManager.Instance != null && !string.IsNullOrEmpty(pendingPlayerName))
+        {
+            FMLeaderboardManager.Instance.SendUsername(pendingPlayerName);
+        }
+
+        // Show "Please Wait!" popup
+        ShowPopupPanel(gameInProgressPanel);
+        Debug.Log("[TabletFMController] Showing Please Wait popup");
+
+        // Flow continues when OnGameStatusReceived fires "Game Idle"
+    }
+
+    // ========================================
+    // Game Status (Step 3: Game Idle -> hide popup)
+    // ========================================
+    private void OnGameStatusReceived(string status)
+    {
+        Debug.Log($"[TabletFMController] Game status received: {status}");
+
+        if (status == "Game Idle")
+        {
+            // Game finished, hide popup and return to form
+            HidePopup();
+            pendingPlayerName = "";
+            Debug.Log("[TabletFMController] Game Idle received, returning to form");
+        }
     }
 
     private void OnRegistrationResult(bool success, string message)
     {
         Debug.Log($"[TabletFMController] Registration result: {success} - {message}");
-        // Popup is already shown, but we could update it here if needed
     }
 
+    // ========================================
+    // Popup Helpers
+    // ========================================
+    private void ShowPopupPanel(VisualElement panel)
+    {
+        if (popup == null) return;
+
+        // Hide all panels first
+        HideAllPopupPanels();
+
+        // Show the popup container
+        popup.style.display = DisplayStyle.Flex;
+        popup.style.opacity = 1;
+
+        // Show the requested panel
+        if (panel != null)
+            panel.style.display = DisplayStyle.Flex;
+    }
+
+    private void HideAllPopupPanels()
+    {
+        if (successPanel != null) successPanel.style.display = DisplayStyle.None;
+        if (areYouReadyPanel != null) areYouReadyPanel.style.display = DisplayStyle.None;
+        if (gameInProgressPanel != null) gameInProgressPanel.style.display = DisplayStyle.None;
+    }
+
+    private void HidePopup()
+    {
+        if (popup == null) return;
+
+        if (popupFlowCoroutine != null)
+        {
+            StopCoroutine(popupFlowCoroutine);
+            popupFlowCoroutine = null;
+        }
+
+        HideAllPopupPanels();
+        popup.style.display = DisplayStyle.None;
+    }
+
+    // ========================================
+    // Language
+    // ========================================
     private void OnLanguageButtonClicked()
     {
         isArabic = !isArabic;
@@ -416,169 +460,55 @@ public class TabletFMController : MonoBehaviour
 
     private void ApplyLanguage()
     {
-        // Set text direction for RTL (Arabic) or LTR (English)
-        var direction = isArabic ? FlexDirection.RowReverse : FlexDirection.Row;
-
-        // Language button
         if (languageButton != null)
-        {
             languageButton.text = isArabic ? "English" : "العربية";
-        }
 
-        // Main description
         if (descriptionLabel != null)
-        {
             descriptionLabel.text = isArabic ? descriptionArabic : descriptionEnglish;
-        }
 
-        // Input label
         if (inputLabel != null)
         {
             inputLabel.text = isArabic ? inputLabelArabic : inputLabelEnglish;
             inputLabel.style.unityTextAlign = isArabic ? TextAnchor.MiddleRight : TextAnchor.MiddleLeft;
         }
 
-        // Name input placeholder (only if it's still the placeholder)
         if (nameInput != null)
         {
             string currentValue = nameInput.value;
             if (currentValue == namePlaceholderEnglish || currentValue == namePlaceholderArabic || string.IsNullOrEmpty(currentValue))
-            {
                 nameInput.value = isArabic ? namePlaceholderArabic : namePlaceholderEnglish;
-            }
-            // Align text input
+
             var textElement = nameInput.Q<TextElement>();
             if (textElement != null)
-            {
                 textElement.style.unityTextAlign = isArabic ? TextAnchor.MiddleRight : TextAnchor.MiddleLeft;
-            }
         }
 
-        // Start button
         if (startButton != null)
-        {
             startButton.text = isArabic ? startButtonArabic : startButtonEnglish;
-        }
 
-        // Terms label
         if (termsLabel != null)
         {
             termsLabel.text = isArabic ? termsArabic : termsEnglish;
             termsLabel.style.unityTextAlign = isArabic ? TextAnchor.MiddleRight : TextAnchor.MiddleLeft;
         }
 
-        // Validation label alignment
         if (validationLabel != null)
-        {
             validationLabel.style.unityTextAlign = isArabic ? TextAnchor.MiddleRight : TextAnchor.MiddleLeft;
-        }
 
-        // Update validation label text
         UpdateValidationLabel();
     }
 
     // ========================================
-    // Popup
+    // Form Reset
     // ========================================
-    private void ShowSuccessPopup()
-    {
-        if (popup == null) return;
-
-        // Update labels based on language
-        if (popupTitleLabel != null)
-        {
-            popupTitleLabel.text = isArabic ? successMessageArabic : successMessageEnglish;
-        }
-
-        if (popupDescriptionLabel != null)
-        {
-            popupDescriptionLabel.text = isArabic ? popupDescriptionArabic : popupDescriptionEnglish;
-        }
-
-        // Position close button based on language (top-left for Arabic, top-right for English)
-        if (popupCloseButton != null)
-        {
-            if (isArabic)
-            {
-                popupCloseButton.style.right = StyleKeyword.Auto;
-                popupCloseButton.style.left = 15;
-            }
-            else
-            {
-                popupCloseButton.style.left = StyleKeyword.Auto;
-                popupCloseButton.style.right = 15;
-            }
-        }
-
-        // Show with fade animation
-        popup.style.display = DisplayStyle.Flex;
-        popup.style.opacity = 0;
-
-        popup.style.transitionProperty = new StyleList<StylePropertyName>(
-            new System.Collections.Generic.List<StylePropertyName> { new StylePropertyName("opacity") }
-        );
-        popup.style.transitionDuration = new StyleList<TimeValue>(
-            new System.Collections.Generic.List<TimeValue> { new TimeValue(0.3f, TimeUnit.Second) }
-        );
-
-        popup.schedule.Execute(() =>
-        {
-            popup.style.opacity = 1;
-        }).ExecuteLater(10);
-
-        // Auto-hide after duration
-        if (hidePopupCoroutine != null)
-        {
-            StopCoroutine(hidePopupCoroutine);
-        }
-        hidePopupCoroutine = StartCoroutine(HidePopupAfterDelay());
-
-        // Reset the form
-        ResetForm();
-
-        Debug.Log("[TabletFMController] Showing success popup");
-    }
-
-    private IEnumerator HidePopupAfterDelay()
-    {
-        yield return new WaitForSeconds(popupDisplayDuration);
-        HidePopup();
-    }
-
-    private void HidePopup()
-    {
-        if (popup == null) return;
-
-        if (hidePopupCoroutine != null)
-        {
-            StopCoroutine(hidePopupCoroutine);
-            hidePopupCoroutine = null;
-        }
-
-        // Fade out
-        popup.style.opacity = 0;
-
-        popup.schedule.Execute(() =>
-        {
-            popup.style.display = DisplayStyle.None;
-        }).ExecuteLater(300);
-    }
-
     private void ResetForm()
     {
-        // Reset name input with correct language placeholder
         if (nameInput != null)
-        {
             nameInput.value = isArabic ? namePlaceholderArabic : namePlaceholderEnglish;
-        }
 
-        // Reset toggle
         if (termsToggle != null)
-        {
             termsToggle.value = false;
-        }
 
-        // Reset username check state
         isUsernameUnique = false;
         isCheckingUsername = false;
         lastCheckedUsername = "";

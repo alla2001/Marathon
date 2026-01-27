@@ -1,0 +1,26 @@
+[
+  {
+    "username": "test",
+    "score": 0,
+    "distance": 0,
+    "time": 0,
+    "createdAt": "2026-01-27T19:45:19.689Z",
+    "updatedAt": "2026-01-27T19:45:19.690Z"
+  },
+  {
+    "username": "Alla",
+    "score": 1427,
+    "distance": 1427,
+    "time": 10,
+    "createdAt": "2026-01-27T19:49:26.188Z",
+    "updatedAt": "2026-01-27T19:49:44.129Z"
+  },
+  {
+    "username": "Alla1",
+    "score": 1209,
+    "distance": 1209,
+    "time": 10,
+    "createdAt": "2026-01-27T19:50:58.166Z",
+    "updatedAt": "2026-01-27T19:51:15.969Z"
+  }
+]

@@ -1,10 +1,12 @@
 using System;
 using System.Collections;
+using System.Collections.Generic;
 using UnityEngine;
 
 /// <summary>
-/// Manages FM (registration) leaderboard - separate from game leaderboard
-/// Used by Tablet FM for username validation
+/// Manages FM leaderboard - separate from game leaderboard.
+/// Supports left/right tablet side selection.
+/// Does NOT touch any shared game code (MQTTManager is read-only).
 /// </summary>
 public class FMLeaderboardManager : MonoBehaviour
 {
@@ -12,21 +14,27 @@ public class FMLeaderboardManager : MonoBehaviour
 
     [Header("Settings")]
     [SerializeField] private float requestTimeout = 3f;
+    [SerializeField] private string tabletSide = "left"; // "left" or "right"
 
     // Events
     public event Action<bool, string> OnUsernameCheckResult; // isUnique, username
     public event Action<bool, string> OnRegistrationResult; // success, message
+    public event Action<string> OnGameStatusReceived; // status string
+    public event Action<FMTop10Message> OnTop10Received; // top 10 data
 
-    // Topics - different from game leaderboard
-    private const string TOPIC_CHECK_USERNAME = "fm-leaderboard/check-username";
-    private const string TOPIC_REGISTER = "fm-leaderboard/register";
-
-    private string checkUsernameResponseTopic;
-    private string registerResponseTopic;
+    // Topics built from side
+    private string checknameTopic;
+    private string checknameResponseTopic;
+    private string writeTopic = "MarathonFM/leaderboard/write";
+    private string top10Topic = "MarathonFM/leaderboard/top10";
+    private string nameTopic;
+    private string statusTopic;
 
     // Pending requests
     private string pendingUsernameCheck = null;
     private Coroutine usernameCheckTimeoutCoroutine = null;
+
+    public string TabletSide => tabletSide;
 
     private void Awake()
     {
@@ -42,6 +50,11 @@ public class FMLeaderboardManager : MonoBehaviour
 
     private void Start()
     {
+        // Load saved side preference
+        tabletSide = PlayerPrefs.GetString("FMTabletSide", "left");
+
+        BuildTopics();
+
         if (MQTTManager.Instance != null)
         {
             MQTTManager.Instance.OnConnected += OnMQTTConnected;
@@ -49,7 +62,7 @@ public class FMLeaderboardManager : MonoBehaviour
 
             if (MQTTManager.Instance.IsConnected)
             {
-                SubscribeToResponseTopics();
+                SubscribeToTopics();
             }
         }
     }
@@ -65,36 +78,71 @@ public class FMLeaderboardManager : MonoBehaviour
 
     private void OnMQTTConnected()
     {
-        SubscribeToResponseTopics();
+        SubscribeToTopics();
     }
 
-    private void SubscribeToResponseTopics()
+    private void BuildTopics()
+    {
+        checknameTopic = $"MarathonFM/leaderboard/{tabletSide}/checkname";
+        checknameResponseTopic = $"MarathonFM/leaderboard/{tabletSide}/checkname/response";
+        nameTopic = $"MarathonFM/{tabletSide}/name";
+        statusTopic = $"MarathonFM/{tabletSide}/status";
+    }
+
+    private void SubscribeToTopics()
     {
         if (MQTTManager.Instance == null || !MQTTManager.Instance.IsConnected)
             return;
 
-        int stationId = MQTTManager.Instance.StationId;
+        MQTTManager.Instance.Subscribe(checknameResponseTopic);
+        MQTTManager.Instance.Subscribe(top10Topic);
+        MQTTManager.Instance.Subscribe(statusTopic);
 
-        // Build station-specific response topics
-        checkUsernameResponseTopic = $"fm-leaderboard/check-username/response/{stationId}";
-        registerResponseTopic = $"fm-leaderboard/register/response/{stationId}";
+        Debug.Log($"[FMLeaderboardManager] Subscribed (side: {tabletSide})");
+    }
 
-        // Subscribe to response topics
-        MQTTManager.Instance.Subscribe(checkUsernameResponseTopic);
-        MQTTManager.Instance.Subscribe(registerResponseTopic);
+    private void UnsubscribeFromTopics()
+    {
+        if (MQTTManager.Instance == null || !MQTTManager.Instance.IsConnected)
+            return;
 
-        Debug.Log($"[FMLeaderboardManager] Subscribed to FM response topics for station {stationId}");
+        MQTTManager.Instance.Unsubscribe(checknameResponseTopic);
+        MQTTManager.Instance.Unsubscribe(statusTopic);
+        // Keep top10 subscribed — it's the same for both sides
+    }
+
+    /// <summary>
+    /// Switch tablet side (left/right). Resubscribes to correct topics.
+    /// </summary>
+    public void SetTabletSide(string side)
+    {
+        side = side.ToLower();
+        if (side != "left" && side != "right") return;
+        if (side == tabletSide) return;
+
+        UnsubscribeFromTopics();
+        tabletSide = side;
+        PlayerPrefs.SetString("FMTabletSide", side);
+        PlayerPrefs.Save();
+        BuildTopics();
+        SubscribeToTopics();
+
+        Debug.Log($"[FMLeaderboardManager] Switched to {tabletSide} tablet");
     }
 
     private void OnRawMessageReceived(string topic, string message)
     {
-        if (topic == checkUsernameResponseTopic)
+        if (topic == checknameResponseTopic)
         {
             HandleUsernameCheckResponse(message);
         }
-        else if (topic == registerResponseTopic)
+        else if (topic == top10Topic)
         {
-            HandleRegisterResponse(message);
+            HandleTop10(message);
+        }
+        else if (topic == statusTopic)
+        {
+            HandleGameStatus(message);
         }
     }
 
@@ -111,7 +159,6 @@ public class FMLeaderboardManager : MonoBehaviour
 
         if (MQTTManager.Instance == null || !MQTTManager.Instance.IsConnected)
         {
-            // Backend not available, assume unique
             Debug.Log($"[FMLeaderboardManager] MQTT not connected, assuming username '{username}' is unique");
             OnUsernameCheckResult?.Invoke(true, username);
             return;
@@ -119,20 +166,12 @@ public class FMLeaderboardManager : MonoBehaviour
 
         pendingUsernameCheck = username;
 
-        // Send request
-        var request = new FMUsernameCheckRequest
-        {
-            username = username,
-            stationId = MQTTManager.Instance.StationId
-        };
-
+        var request = new FMUsernameCheckRequest { username = username };
         string json = JsonUtility.ToJson(request);
-        MQTTManager.Instance.Subscribe(checkUsernameResponseTopic);
-        PublishRaw(TOPIC_CHECK_USERNAME, json);
+        PublishRaw(checknameTopic, json);
 
-        Debug.Log($"[FMLeaderboardManager] Checking FM username: {username}");
+        Debug.Log($"[FMLeaderboardManager] Checking username: {username} on {checknameTopic}");
 
-        // Start timeout coroutine
         if (usernameCheckTimeoutCoroutine != null)
         {
             StopCoroutine(usernameCheckTimeoutCoroutine);
@@ -144,7 +183,6 @@ public class FMLeaderboardManager : MonoBehaviour
     {
         yield return new WaitForSeconds(requestTimeout);
 
-        // If we still have a pending check for this username, assume unique
         if (pendingUsernameCheck == username)
         {
             Debug.Log($"[FMLeaderboardManager] Username check timeout, assuming '{username}' is unique");
@@ -159,7 +197,6 @@ public class FMLeaderboardManager : MonoBehaviour
         {
             var response = JsonUtility.FromJson<FMUsernameCheckResponse>(message);
 
-            // Only process if this is the username we're waiting for
             if (pendingUsernameCheck == response.username)
             {
                 if (usernameCheckTimeoutCoroutine != null)
@@ -170,7 +207,7 @@ public class FMLeaderboardManager : MonoBehaviour
 
                 pendingUsernameCheck = null;
 
-                Debug.Log($"[FMLeaderboardManager] FM Username '{response.username}' isUnique: {response.isUnique}");
+                Debug.Log($"[FMLeaderboardManager] Username '{response.username}' isUnique: {response.isUnique}");
                 OnUsernameCheckResult?.Invoke(response.isUnique, response.username);
             }
         }
@@ -181,46 +218,80 @@ public class FMLeaderboardManager : MonoBehaviour
     }
 
     // ========================================
-    // Register User
+    // Write Entry
     // ========================================
-    public void RegisterUser(string username)
+    public void WriteEntry(string username, float distance, float time)
     {
         if (MQTTManager.Instance == null || !MQTTManager.Instance.IsConnected)
         {
-            Debug.LogWarning("[FMLeaderboardManager] Cannot register - MQTT not connected");
-            // Still fire success for now since user said no storage
+            Debug.LogWarning("[FMLeaderboardManager] Cannot write - MQTT not connected");
             OnRegistrationResult?.Invoke(true, "Registered (offline)");
             return;
         }
 
-        var request = new FMRegisterRequest
+        var request = new FMWriteRequest
         {
             username = username,
-            stationId = MQTTManager.Instance.StationId,
-            timestamp = DateTime.UtcNow.ToString("o")
+            distance = distance,
+            time = time
         };
 
         string json = JsonUtility.ToJson(request);
-        PublishRaw(TOPIC_REGISTER, json);
+        PublishRaw(writeTopic, json);
 
-        Debug.Log($"[FMLeaderboardManager] Registering FM user: {username}");
-
-        // For now, assume success immediately (user said no storage)
-        OnRegistrationResult?.Invoke(true, "Registration sent");
+        Debug.Log($"[FMLeaderboardManager] Writing entry: {username} distance={distance} time={time}");
+        OnRegistrationResult?.Invoke(true, "Entry submitted");
     }
 
-    private void HandleRegisterResponse(string message)
+    /// <summary>
+    /// Register user (write with 0 distance/time, updated later by game)
+    /// </summary>
+    public void RegisterUser(string username)
+    {
+        WriteEntry(username, 0f, 0f);
+    }
+
+    // ========================================
+    // Send Username to Game
+    // ========================================
+    public void SendUsername(string username)
+    {
+        if (MQTTManager.Instance == null || !MQTTManager.Instance.IsConnected)
+        {
+            Debug.LogWarning("[FMLeaderboardManager] Cannot send username - MQTT not connected");
+            return;
+        }
+
+        PublishRaw(nameTopic, username);
+
+        Debug.Log($"[FMLeaderboardManager] Sent username '{username}' on {nameTopic}");
+    }
+
+    // ========================================
+    // Top 10
+    // ========================================
+    private void HandleTop10(string message)
     {
         try
         {
-            var response = JsonUtility.FromJson<FMRegisterResponse>(message);
-            Debug.Log($"[FMLeaderboardManager] Register response: {response.message}");
-            OnRegistrationResult?.Invoke(response.success, response.message);
+            var top10 = JsonUtility.FromJson<FMTop10Message>(message);
+            OnTop10Received?.Invoke(top10);
         }
         catch (Exception ex)
         {
-            Debug.LogError($"[FMLeaderboardManager] Error parsing register response: {ex.Message}");
+            Debug.LogError($"[FMLeaderboardManager] Error parsing top 10: {ex.Message}");
         }
+    }
+
+    // ========================================
+    // Game Status
+    // ========================================
+    private void HandleGameStatus(string message)
+    {
+        // Status comes as raw string: "Game Idle" or "Game Active"
+        string status = message.Trim().Trim('"');
+        Debug.Log($"[FMLeaderboardManager] Game status: {status}");
+        OnGameStatusReceived?.Invoke(status);
     }
 
     private void PublishRaw(string topic, string json)
@@ -239,7 +310,6 @@ public class FMLeaderboardManager : MonoBehaviour
 public class FMUsernameCheckRequest
 {
     public string username;
-    public int stationId;
 }
 
 [Serializable]
@@ -249,22 +319,32 @@ public class FMUsernameCheckResponse
     public string username;
     public bool isUnique;
     public bool exists;
-    public int stationId;
 }
 
 [Serializable]
-public class FMRegisterRequest
+public class FMWriteRequest
 {
     public string username;
-    public int stationId;
-    public string timestamp;
+    public float distance;
+    public float time;
+}
+
+
+[Serializable]
+public class FMTop10Message
+{
+    public string messageType;
+    public long timestamp;
+    public float totalDistances;
+    public List<FMTop10Entry> leaderboard;
 }
 
 [Serializable]
-public class FMRegisterResponse
+public class FMTop10Entry
 {
-    public bool success;
-    public string message;
+    public int rank;
     public string username;
-    public int stationId;
+    public int score;
+    public float distance;
+    public float time;
 }

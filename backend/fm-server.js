@@ -386,6 +386,10 @@ function getDashboardHTML() {
   .btn { padding: 8px 18px; border: none; border-radius: 8px; cursor: pointer; font-size: 13px; font-weight: 500; transition: all 0.2s; }
   .btn-danger { background: rgba(231,76,60,0.15); color: #e74c3c; border: 1px solid rgba(231,76,60,0.3); }
   .btn-danger:hover { background: rgba(231,76,60,0.3); }
+  .btn-stop { background: rgba(241,196,15,0.15); color: #f1c40f; border: 1px solid rgba(241,196,15,0.3); }
+  .btn-stop:hover { background: rgba(241,196,15,0.3); }
+  .btn-stop-both { background: rgba(231,76,60,0.15); color: #e67e22; border: 1px solid rgba(231,76,60,0.3); }
+  .btn-stop-both:hover { background: rgba(231,76,60,0.3); }
   .all-entries-label { font-size: 12px; color: #666; }
   .table-wrap { padding: 0 32px 32px; }
   table { width: 100%; border-collapse: collapse; margin-top: 8px; }
@@ -436,6 +440,9 @@ function getDashboardHTML() {
     <span class="all-entries-label">Show all entries (not just top 10)</span>
   </label>
   <div class="spacer"></div>
+  <button class="btn btn-stop" onclick="stopGame('left')">Stop Left Game</button>
+  <button class="btn btn-stop" onclick="stopGame('right')">Stop Right Game</button>
+  <button class="btn btn-stop-both" onclick="stopGame('both')">Stop Both</button>
   <button class="btn btn-danger" onclick="confirmAction('clear-all')">Clear All Entries</button>
 </div>
 <div class="table-wrap">
@@ -537,6 +544,10 @@ function confirmAction(action, username) {
   document.body.appendChild(overlay);
 }
 
+async function stopGame(side) {
+  try { var r = await fetch('/api/stopgame/' + side, { method: 'POST' }); var j = await r.json(); showToast(j.message || 'Sent', 'success'); } catch(e) { showToast('Error: ' + e.message, 'error'); }
+}
+
 async function clearAll() {
   try { var r = await fetch('/api/clear', { method: 'POST' }); var j = await r.json(); showToast(j.message || 'Cleared', 'success'); poll(); } catch(e) { showToast('Error: ' + e.message, 'error'); }
 }
@@ -612,6 +623,21 @@ function startDashboardServer() {
     else if (req.method === 'GET' && req.url === '/api/data') {
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify(getDashboardData()));
+    }
+    else if (req.method === 'POST' && req.url.startsWith('/api/stopgame/')) {
+      const side = req.url.split('/api/stopgame/')[1];
+      if (!mqttClient || !mqttClient.connected) {
+        res.writeHead(503, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: false, error: 'MQTT not connected' }));
+        return;
+      }
+      const sides = side === 'both' ? ['left', 'right'] : [side];
+      sides.forEach(function(s) {
+        mqttClient.publish('MarathonFM/' + s + '/stopgame', JSON.stringify({ timestamp: Date.now() }), { qos: 1 });
+        console.log('[Dashboard] Published stopgame to MarathonFM/' + s + '/stopgame');
+      });
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ success: true, message: 'Stop game sent to ' + sides.join(' & ') }));
     }
     else if (req.method === 'POST' && req.url === '/api/clear') {
       database = [];

@@ -21,6 +21,7 @@ public class TabletFMController : MonoBehaviour
 
     [Header("Popup Settings")]
     [SerializeField] private float successDisplayDuration = 4f;
+    [SerializeField] private float stopButtonDelay = 15f;
     [SerializeField] private string usernameTakenMessageEnglish = "Username already registered";
     [SerializeField] private string usernameTakenMessageArabic = "اسم المستخدم مسجل مسبقاً";
 
@@ -72,6 +73,7 @@ public class TabletFMController : MonoBehaviour
     private string lastCheckedUsername = "";
     private Coroutine usernameCheckCoroutine;
     private Coroutine popupFlowCoroutine;
+    private Coroutine stopButtonDelayCoroutine;
 
     // Stored player name for the popup flow
     private string pendingPlayerName = "";
@@ -203,6 +205,7 @@ public class TabletFMController : MonoBehaviour
 
         if (usernameCheckCoroutine != null) StopCoroutine(usernameCheckCoroutine);
         if (popupFlowCoroutine != null) StopCoroutine(popupFlowCoroutine);
+        if (stopButtonDelayCoroutine != null) StopCoroutine(stopButtonDelayCoroutine);
     }
 
     // ========================================
@@ -394,9 +397,25 @@ public class TabletFMController : MonoBehaviour
 
         // Show "Please Wait!" popup
         ShowPopupPanel(gameInProgressPanel);
+
+        // Hide stop button for the first N seconds
+        if (stopGameButton != null)
+            stopGameButton.style.display = DisplayStyle.None;
+        if (stopButtonDelayCoroutine != null)
+            StopCoroutine(stopButtonDelayCoroutine);
+        stopButtonDelayCoroutine = StartCoroutine(ShowStopButtonAfterDelay());
+
         Debug.Log("[TabletFMController] Showing Please Wait popup");
 
         // Flow continues when OnGameStatusReceived fires "Game Idle"
+    }
+
+    private IEnumerator ShowStopButtonAfterDelay()
+    {
+        yield return new WaitForSeconds(stopButtonDelay);
+        if (stopGameButton != null)
+            stopGameButton.style.display = DisplayStyle.Flex;
+        stopButtonDelayCoroutine = null;
     }
 
     // ========================================
@@ -456,6 +475,12 @@ public class TabletFMController : MonoBehaviour
             popupFlowCoroutine = null;
         }
 
+        if (stopButtonDelayCoroutine != null)
+        {
+            StopCoroutine(stopButtonDelayCoroutine);
+            stopButtonDelayCoroutine = null;
+        }
+
         HideAllPopupPanels();
         popup.style.display = DisplayStyle.None;
     }
@@ -465,7 +490,13 @@ public class TabletFMController : MonoBehaviour
     // ========================================
     public void CancelGame()
     {
-        Debug.Log("[TabletFMController] Game cancelled via debug menu");
+        Debug.Log("[TabletFMController] Game cancelled, broadcasting stop game");
+
+        if (FMLeaderboardManager.Instance != null)
+        {
+            FMLeaderboardManager.Instance.SendStopGame();
+        }
+
         HidePopup();
         pendingPlayerName = "";
         ResetForm();

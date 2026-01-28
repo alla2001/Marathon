@@ -815,6 +815,26 @@ function getDashboardHTML() {
   .confirm-box .btn-confirm { background: #e74c3c; color: #fff; }
   .confirm-box .btn-confirm:hover { background: #c0392b; }
   .all-entries-label { font-size: 12px; color: #666; }
+  .config-section { padding: 16px 32px; border-bottom: 1px solid #222; }
+  .config-section h2 { font-size: 15px; color: #e67e22; margin-bottom: 12px; font-weight: 600; }
+  .config-toggle { font-size: 13px; color: #888; cursor: pointer; user-select: none; display: flex; align-items: center; gap: 8px; padding: 10px 0; }
+  .config-toggle:hover { color: #ccc; }
+  .config-toggle .arrow { transition: transform 0.2s; display: inline-block; }
+  .config-toggle .arrow.open { transform: rotate(90deg); }
+  .config-grid { display: none; gap: 16px; padding: 8px 0; }
+  .config-grid.open { display: flex; flex-wrap: wrap; }
+  .config-mode { background: #1a1a2e; border: 1px solid #2a2a4a; border-radius: 10px; padding: 16px; flex: 1; min-width: 260px; }
+  .config-mode h3 { font-size: 13px; color: #e67e22; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 10px; }
+  .config-field { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+  .config-field label { font-size: 12px; color: #888; }
+  .config-field input { background: #141422; border: 1px solid #2a2a4a; border-radius: 6px; padding: 5px 10px; color: #e0e0e0; font-size: 13px; width: 120px; text-align: right; outline: none; }
+  .config-field input:focus { border-color: #e67e22; }
+  .config-field input.str { width: 200px; text-align: left; }
+  .config-actions { display: flex; gap: 8px; margin-top: 12px; padding-top: 12px; border-top: 1px solid #222; }
+  .btn-save { background: rgba(46,204,113,0.15); color: #2ecc71; border: 1px solid rgba(46,204,113,0.3); }
+  .btn-save:hover { background: rgba(46,204,113,0.3); }
+  .broadcast-section { background: #1a1a2e; border: 1px solid #2a2a4a; border-radius: 10px; padding: 16px; min-width: 260px; }
+  .broadcast-section h3 { font-size: 13px; color: #e67e22; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 10px; }
 </style>
 </head>
 <body>
@@ -828,6 +848,17 @@ function getDashboardHTML() {
   <div class="stat-card"><div class="label">Running Entries</div><div class="value" id="runningEntries">0</div></div>
   <div class="stat-card"><div class="label">Cycling Entries</div><div class="value" id="cyclingEntries">0</div></div>
   <div class="stat-card"><div class="label">Total Distance</div><div class="value" id="totalDistance">0 <small>km</small></div></div>
+</div>
+<div class="config-section">
+  <div class="config-toggle" onclick="toggleConfig()">
+    <span class="arrow" id="configArrow">&#9654;</span>
+    <span>Game Configuration</span>
+  </div>
+  <div class="config-grid" id="configGrid"></div>
+  <div class="config-actions" id="configActions" style="display:none;">
+    <button class="btn btn-save" onclick="saveConfig()">Save Config</button>
+    <span id="configStatus" style="font-size:12px;color:#666;line-height:34px;"></span>
+  </div>
 </div>
 <div class="controls">
   <div class="tabs">
@@ -962,6 +993,99 @@ async function deleteEntry(mode, username) {
   try { var r = await fetch('/api/delete/' + mode + '/' + encodeURIComponent(username), { method: 'POST' }); var j = await r.json(); showToast(j.message || 'Deleted', 'success'); poll(); } catch(e) { showToast('Error: ' + e.message, 'error'); }
 }
 
+var configData = null;
+
+function toggleConfig() {
+  var grid = document.getElementById('configGrid');
+  var arrow = document.getElementById('configArrow');
+  var actions = document.getElementById('configActions');
+  var isOpen = grid.classList.contains('open');
+  if (isOpen) {
+    grid.classList.remove('open');
+    arrow.classList.remove('open');
+    actions.style.display = 'none';
+  } else {
+    grid.classList.add('open');
+    arrow.classList.add('open');
+    actions.style.display = 'flex';
+    loadConfig();
+  }
+}
+
+async function loadConfig() {
+  try {
+    var r = await fetch('/api/config');
+    configData = await r.json();
+    renderConfig();
+  } catch(e) { showToast('Error loading config', 'error'); }
+}
+
+function renderConfig() {
+  if (!configData) return;
+  var grid = document.getElementById('configGrid');
+  var html = '';
+  var modes = configData.gameModes || {};
+  var modeNames = Object.keys(modes);
+  modeNames.forEach(function(mode) {
+    var cfg = modes[mode];
+    var label = mode.charAt(0).toUpperCase() + mode.slice(1);
+    html += '<div class="config-mode"><h3>' + label + '</h3>';
+    html += cfgField(mode, 'routeDistance', 'Route Distance (m)', cfg.routeDistance, 'num');
+    html += cfgField(mode, 'timeLimit', 'Time Limit (s)', cfg.timeLimit, 'num');
+    html += cfgField(mode, 'countdownSeconds', 'Countdown (s)', cfg.countdownSeconds, 'num');
+    html += cfgField(mode, 'resultsDisplaySeconds', 'Results Display (s)', cfg.resultsDisplaySeconds, 'num');
+    html += cfgField(mode, 'idleTimeoutSeconds', 'Idle Timeout (s)', cfg.idleTimeoutSeconds, 'num');
+    html += cfgField(mode, 'machineTopic', 'Machine Topic', cfg.machineTopic || '', 'str');
+    html += '</div>';
+  });
+  var bc = configData.broadcast || {};
+  html += '<div class="broadcast-section"><h3>Broadcast</h3>';
+  html += cfgField('broadcast', 'configIntervalSeconds', 'Config Interval (s)', bc.configIntervalSeconds, 'num');
+  html += cfgField('broadcast', 'leaderboardIntervalSeconds', 'Leaderboard Interval (s)', bc.leaderboardIntervalSeconds, 'num');
+  html += '</div>';
+  grid.innerHTML = html;
+}
+
+function cfgField(section, key, label, value, type) {
+  var cls = type === 'str' ? ' str' : '';
+  var inputType = type === 'num' ? 'number' : 'text';
+  return '<div class="config-field"><label>' + label + '</label><input type="' + inputType + '" class="' + cls + '" data-section="' + section + '" data-key="' + key + '" value="' + escAttr(String(value != null ? value : '')) + '"></div>';
+}
+
+async function saveConfig() {
+  var inputs = document.querySelectorAll('#configGrid input');
+  var newConfig = { gameModes: {}, broadcast: {} };
+  inputs.forEach(function(inp) {
+    var section = inp.dataset.section;
+    var key = inp.dataset.key;
+    var val = inp.type === 'number' ? Number(inp.value) : inp.value;
+    if (section === 'broadcast') {
+      newConfig.broadcast[key] = val;
+    } else {
+      if (!newConfig.gameModes[section]) newConfig.gameModes[section] = {};
+      newConfig.gameModes[section][key] = val;
+    }
+  });
+  // Preserve broadcast.onConnect
+  if (configData && configData.broadcast) {
+    newConfig.broadcast.onConnect = configData.broadcast.onConnect !== false;
+  }
+  try {
+    var r = await fetch('/api/config', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(newConfig)
+    });
+    var j = await r.json();
+    if (j.success) {
+      showToast('Config saved & broadcasted', 'success');
+      configData = newConfig;
+    } else {
+      showToast('Error: ' + (j.error || 'unknown'), 'error');
+    }
+  } catch(e) { showToast('Error: ' + e.message, 'error'); }
+}
+
 async function poll() {
   try {
     var r = await fetch('/api/data');
@@ -1036,6 +1160,29 @@ function startDashboardServer() {
     else if (req.method === 'GET' && req.url === '/api/data') {
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify(getDashboardData()));
+    }
+    else if (req.method === 'GET' && req.url === '/api/config') {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(gameConfig));
+    }
+    else if (req.method === 'POST' && req.url === '/api/config') {
+      let body = '';
+      req.on('data', chunk => { body += chunk; });
+      req.on('end', () => {
+        try {
+          const newConfig = JSON.parse(body);
+          gameConfig = newConfig;
+          fs.writeFileSync(CONFIG_PATH, JSON.stringify(newConfig, null, 2), 'utf8');
+          console.log('[Dashboard] Config saved to config.json');
+          // Hot-reload watcher will pick this up and broadcast automatically
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ success: true, message: 'Config saved' }));
+        } catch(e) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ success: false, error: e.message }));
+        }
+      });
+      return;
     }
     else if (req.method === 'POST' && req.url === '/api/clear') {
       database.rowing = [];

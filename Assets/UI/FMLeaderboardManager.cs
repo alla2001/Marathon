@@ -268,6 +268,16 @@ public class FMLeaderboardManager : MonoBehaviour
     }
 
     // ========================================
+    // Stop Game
+    // ========================================
+    public void SendStopGame()
+    {
+        string stopTopic = $"MarathonFM/{tabletSide}/stopgame";
+        PublishRaw(stopTopic, JsonUtility.ToJson(new FMStopGameMessage { timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() }));
+        Debug.Log($"[FMLeaderboardManager] Sent stop game on {stopTopic}");
+    }
+
+    // ========================================
     // Top 10
     // ========================================
     private void HandleTop10(string message)
@@ -347,4 +357,10 @@ public class FMTop10Entry
     public int score;
     public float distance;
     public float time;
+}
+
+[Serializable]
+public class FMStopGameMessage
+{
+    public long timestamp;
 }

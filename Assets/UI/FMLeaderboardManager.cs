@@ -288,7 +288,7 @@ public class FMLeaderboardManager : MonoBehaviour
     // ========================================
     private void HandleGameStatus(string message)
     {
-        // Status comes as raw string: "Game Idle" or "Game Active"
+        // Status comes as raw string: "GameIdle" or "GameActive"
         string status = message.Trim().Trim('"');
         Debug.Log($"[FMLeaderboardManager] Game status: {status}");
         OnGameStatusReceived?.Invoke(status);

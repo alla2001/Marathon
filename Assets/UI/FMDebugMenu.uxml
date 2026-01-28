@@ -1,0 +1,58 @@
+<ui:UXML xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:ui="UnityEngine.UIElements" xmlns:uie="UnityEditor.UIElements" noNamespaceSchemaLocation="../../UIElementsSchema/UIElements.xsd" editor-extension-mode="False">
+    <ui:VisualElement name="DebugRoot" style="flex-grow: 1; background-color: rgba(0, 0, 0, 0.95); align-items: center; justify-content: center; padding-left: 40px; padding-right: 40px;">
+        <ui:VisualElement name="DebugPanel" style="background-color: rgb(30, 30, 30); border-left-width: 3px; border-right-width: 3px; border-top-width: 3px; border-bottom-width: 3px; border-color: rgb(255, 140, 0); padding-left: 40px; padding-right: 40px; padding-top: 30px; padding-bottom: 30px; min-width: 600px; max-width: 800px;">
+            <ui:VisualElement name="Header" style="flex-direction: row; justify-content: space-between; align-items: center; margin-bottom: 30px; border-bottom-width: 2px; border-color: rgb(80, 80, 80); padding-bottom: 15px;">
+                <ui:Label text="DEBUG MENU" name="Title" style="font-size: 32px; color: rgb(255, 140, 0); -unity-font-style: bold;"/>
+                <ui:Button text="X" name="CloseButton" style="width: 40px; height: 40px; font-size: 24px; background-color: rgb(180, 50, 50); color: rgb(255, 255, 255); -unity-font-style: bold;"/>
+            </ui:VisualElement>
+            <ui:VisualElement name="MQTTSection" style="margin-bottom: 30px;">
+                <ui:Label text="MQTT SETTINGS" name="MQTTTitle" style="font-size: 20px; color: rgb(255, 255, 255); -unity-font-style: bold; margin-bottom: 15px;"/>
+                <ui:VisualElement name="BrokerAddressRow" style="flex-direction: row; margin-bottom: 10px; align-items: center;">
+                    <ui:Label text="Broker Address:" style="font-size: 16px; color: rgb(200, 200, 200); min-width: 180px;"/>
+                    <ui:TextField name="BrokerAddressInput" value="" style="flex-grow: 1; height: 35px; font-size: 16px; background-color: rgb(50, 50, 50); border-color: rgb(100, 100, 100); color: rgb(29, 29, 29);"/>
+                </ui:VisualElement>
+                <ui:VisualElement name="BrokerPortRow" style="flex-direction: row; margin-bottom: 10px; align-items: center;">
+                    <ui:Label text="Broker Port:" style="font-size: 16px; color: rgb(200, 200, 200); min-width: 180px;"/>
+                    <ui:TextField name="BrokerPortInput" style="flex-grow: 1; height: 35px; font-size: 16px; background-color: rgb(50, 50, 50); border-color: rgb(100, 100, 100); color: rgb(29, 29, 29);"/>
+                </ui:VisualElement>
+                <ui:VisualElement name="UsernameRow" style="flex-direction: row; margin-bottom: 10px; align-items: center;">
+                    <ui:Label text="Username (optional):" style="font-size: 16px; color: rgb(200, 200, 200); min-width: 180px;"/>
+                    <ui:TextField name="UsernameInput" value="" style="flex-grow: 1; height: 35px; font-size: 16px; background-color: rgb(50, 50, 50); border-color: rgb(100, 100, 100); color: rgb(29, 29, 29);"/>
+                </ui:VisualElement>
+                <ui:VisualElement name="PasswordRow" style="flex-direction: row; margin-bottom: 15px; align-items: center;">
+                    <ui:Label text="Password (optional):" style="font-size: 16px; color: rgb(200, 200, 200); min-width: 180px;"/>
+                    <ui:TextField name="PasswordInput" value="" password="true" style="flex-grow: 1; height: 35px; font-size: 16px; background-color: rgb(50, 50, 50); border-color: rgb(100, 100, 100); color: rgb(29, 29, 29);"/>
+                </ui:VisualElement>
+                <ui:VisualElement name="ConnectionStatusRow" style="flex-direction: row; margin-bottom: 15px; align-items: center;">
+                    <ui:Label text="Status:" style="font-size: 16px; color: rgb(200, 200, 200); min-width: 180px;"/>
+                    <ui:Label text="Disconnected" name="ConnectionStatus" style="font-size: 16px; color: rgb(200, 100, 100); flex-grow: 1;"/>
+                </ui:VisualElement>
+                <ui:VisualElement name="ConnectionButtons" style="flex-direction: row; justify-content: flex-end;">
+                    <ui:Button text="Connect" name="ConnectButton" style="width: 120px; height: 40px; font-size: 16px; background-color: rgb(50, 150, 50); color: rgb(255, 255, 255); -unity-font-style: bold; margin-right: 10px;"/>
+                    <ui:Button text="Disconnect" name="DisconnectButton" style="width: 120px; height: 40px; font-size: 16px; background-color: rgb(150, 50, 50); color: rgb(255, 255, 255); -unity-font-style: bold;"/>
+                </ui:VisualElement>
+            </ui:VisualElement>
+            <ui:VisualElement name="TabletSideSection" style="margin-bottom: 20px;">
+                <ui:Label text="TABLET SIDE" name="TabletSideTitle" style="font-size: 20px; color: rgb(255, 255, 255); -unity-font-style: bold; margin-bottom: 15px;"/>
+                <ui:VisualElement name="SideButtons" style="flex-direction: row; justify-content: space-between;">
+                    <ui:Button text="LEFT" name="LeftButton" style="flex-grow: 1; height: 50px; font-size: 16px; background-color: rgb(255, 140, 0); color: rgb(255, 255, 255); -unity-font-style: bold; margin-right: 10px;"/>
+                    <ui:Button text="RIGHT" name="RightButton" style="flex-grow: 1; height: 50px; font-size: 16px; background-color: rgb(60, 60, 60); color: rgb(255, 255, 255); -unity-font-style: bold;"/>
+                </ui:VisualElement>
+                <ui:Label text="Selected Side: LEFT" name="SelectedSideLabel" style="font-size: 14px; color: rgb(255, 140, 0); margin-top: 10px; -unity-text-align: middle-center; -unity-font-style: bold;"/>
+            </ui:VisualElement>
+            <ui:VisualElement name="GameControlSection" style="margin-bottom: 20px;">
+                <ui:Label text="GAME CONTROL" name="GameControlTitle" style="font-size: 20px; color: rgb(255, 255, 255); -unity-font-style: bold; margin-bottom: 15px;"/>
+                <ui:Button text="CANCEL GAME (Force Reset)" name="CancelGameButton" style="height: 50px; font-size: 16px; background-color: rgb(180, 50, 50); color: rgb(255, 255, 255); -unity-font-style: bold;"/>
+            </ui:VisualElement>
+            <ui:VisualElement name="LogSection" style="margin-bottom: 20px;">
+                <ui:VisualElement name="LogHeader" style="flex-direction: row; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                    <ui:Label text="DEBUG LOGS" name="LogTitle" style="font-size: 20px; color: rgb(255, 255, 255); -unity-font-style: bold;"/>
+                    <ui:Button text="Clear" name="ClearLogButton" style="width: 80px; height: 30px; font-size: 12px; background-color: rgb(100, 100, 100); color: rgb(255, 255, 255);"/>
+                </ui:VisualElement>
+                <ui:ScrollView name="LogScrollView" style="max-height: 300px; background-color: rgb(20, 20, 20); border-width: 1px; border-color: rgb(80, 80, 80); padding-left: 10px; padding-right: 10px; padding-top: 10px; padding-bottom: 10px;">
+                    <ui:VisualElement name="LogContainer"/>
+                </ui:ScrollView>
+            </ui:VisualElement>
+        </ui:VisualElement>
+    </ui:VisualElement>
+</ui:UXML>

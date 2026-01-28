@@ -61,6 +61,7 @@ public class TabletFMController : MonoBehaviour
     private VisualElement areYouReadyPanel;
     private VisualElement gameInProgressPanel;
     private Button startGameButton; // Button inside "Are you Ready?" panel
+    private Button stopGameButton;  // Button inside "gameinprogress" panel
 
     private StyleBackground originalButtonImage;
     private bool isArabic = false;
@@ -127,6 +128,16 @@ public class TabletFMController : MonoBehaviour
             }
         }
 
+        // Find Stop Game button inside gameinprogress panel
+        if (gameInProgressPanel != null)
+        {
+            stopGameButton = gameInProgressPanel.Q<Button>("StopGameButton");
+            if (stopGameButton != null)
+            {
+                stopGameButton.clicked += CancelGame;
+            }
+        }
+
         // Hide popup and all panels initially
         HideAllPopupPanels();
         if (popup != null) popup.style.display = DisplayStyle.None;
@@ -181,6 +192,7 @@ public class TabletFMController : MonoBehaviour
         if (startButton != null) startButton.clicked -= OnPlayButtonClicked;
         if (languageButton != null) languageButton.clicked -= OnLanguageButtonClicked;
         if (startGameButton != null) startGameButton.clicked -= OnStartGameClicked;
+        if (stopGameButton != null) stopGameButton.clicked -= CancelGame;
 
         if (FMLeaderboardManager.Instance != null)
         {
@@ -394,7 +406,7 @@ public class TabletFMController : MonoBehaviour
     {
         Debug.Log($"[TabletFMController] Game status received: {status}");
 
-        if (status == "Game Idle")
+        if (status == "GameIdle")
         {
             // Game finished, hide popup and return to form
             HidePopup();
@@ -446,6 +458,17 @@ public class TabletFMController : MonoBehaviour
 
         HideAllPopupPanels();
         popup.style.display = DisplayStyle.None;
+    }
+
+    // ========================================
+    // Cancel Game (called from debug menu)
+    // ========================================
+    public void CancelGame()
+    {
+        Debug.Log("[TabletFMController] Game cancelled via debug menu");
+        HidePopup();
+        pendingPlayerName = "";
+        ResetForm();
     }
 
     // ========================================

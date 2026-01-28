@@ -64,8 +64,8 @@ function simulateGame(side, playerName) {
 
   console.log(`\n[GAME] === ${side.toUpperCase()} === Player "${playerName}" starting game ===`);
 
-  // Send "Game Active" status
-  publish(`MarathonFM/${side}/status`, 'Game Active');
+  // Send "GameActive" status
+  publish(`MarathonFM/${side}/status`, 'GameActive');
 
   // After GAME_DURATION seconds, end the game
   activeGames[side] = setTimeout(() => {
@@ -82,8 +82,8 @@ function simulateGame(side, playerName) {
       time: time
     });
 
-    // Send "Game Idle" status
-    publish(`MarathonFM/${side}/status`, 'Game Idle');
+    // Send "GameIdle" status
+    publish(`MarathonFM/${side}/status`, 'GameIdle');
 
     delete activeGames[side];
   }, GAME_DURATION * 1000);

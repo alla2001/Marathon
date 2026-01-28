@@ -1,7 +1,6 @@
 using UnityEngine;
 using UnityEngine.UIElements;
 using System.Collections;
-using MarathonMQTT;
 
 /// <summary>
 /// Debug menu for FM Tablet scene only.
@@ -24,7 +23,6 @@ public class FMDebugMenuController : MonoBehaviour
     // MQTT UI
     private TextField brokerAddressInput;
     private TextField brokerPortInput;
-    private TextField stationIdInput;
     private TextField usernameInput;
     private TextField passwordInput;
     private Label connectionStatus;
@@ -36,6 +34,9 @@ public class FMDebugMenuController : MonoBehaviour
     private Button leftButton;
     private Button rightButton;
     private Label selectedSideLabel;
+
+    // Game Control
+    private Button cancelGameButton;
 
     // Log Window
     private VisualElement logContainer;
@@ -65,7 +66,6 @@ public class FMDebugMenuController : MonoBehaviour
         // MQTT elements
         brokerAddressInput = root.Q<TextField>("BrokerAddressInput");
         brokerPortInput = root.Q<TextField>("BrokerPortInput");
-        stationIdInput = root.Q<TextField>("StationIdInput");
         usernameInput = root.Q<TextField>("UsernameInput");
         passwordInput = root.Q<TextField>("PasswordInput");
         connectionStatus = root.Q<Label>("ConnectionStatus");
@@ -78,6 +78,9 @@ public class FMDebugMenuController : MonoBehaviour
         rightButton = root.Q<Button>("RightButton");
         selectedSideLabel = root.Q<Label>("SelectedSideLabel");
 
+        // Game control elements
+        cancelGameButton = root.Q<Button>("CancelGameButton");
+
         // Log elements
         logContainer = root.Q<VisualElement>("LogContainer");
         logScrollView = root.Q<ScrollView>("LogScrollView");
@@ -89,6 +92,7 @@ public class FMDebugMenuController : MonoBehaviour
         if (closeButton != null) closeButton.clicked += CloseDebugMenu;
         if (leftButton != null) leftButton.clicked += () => SelectSide("left");
         if (rightButton != null) rightButton.clicked += () => SelectSide("right");
+        if (cancelGameButton != null) cancelGameButton.clicked += OnCancelGameClicked;
         if (clearLogButton != null) clearLogButton.clicked += ClearLogs;
 
         Application.logMessageReceived += OnLogMessageReceived;
@@ -111,6 +115,7 @@ public class FMDebugMenuController : MonoBehaviour
         if (connectButton != null) connectButton.clicked -= OnConnectClicked;
         if (disconnectButton != null) disconnectButton.clicked -= OnDisconnectClicked;
         if (closeButton != null) closeButton.clicked -= CloseDebugMenu;
+        if (cancelGameButton != null) cancelGameButton.clicked -= OnCancelGameClicked;
         if (clearLogButton != null) clearLogButton.clicked -= ClearLogs;
 
         Application.logMessageReceived -= OnLogMessageReceived;
@@ -241,9 +246,6 @@ public class FMDebugMenuController : MonoBehaviour
             if (int.TryParse(brokerPortInput.value, out int port))
                 MQTTManager.Instance.SetBrokerPort(port);
 
-            if (int.TryParse(stationIdInput.value, out int stationId))
-                MQTTManager.Instance.SetStationId(stationId);
-
             MQTTManager.Instance.SetCredentials(usernameInput.value, passwordInput.value);
             MQTTManager.Instance.Connect();
         }
@@ -276,6 +278,23 @@ public class FMDebugMenuController : MonoBehaviour
         {
             connectionStatus.text = "Disconnected";
             connectionStatus.style.color = new StyleColor(new Color(0.8f, 0.4f, 0.4f));
+        }
+    }
+
+    // ========================================
+    // Cancel Game
+    // ========================================
+    private void OnCancelGameClicked()
+    {
+        var fmController = FindObjectOfType<TabletFMController>();
+        if (fmController != null)
+        {
+            fmController.CancelGame();
+            Debug.Log("[FMDebugMenu] Game cancelled - returned to start page");
+        }
+        else
+        {
+            Debug.LogWarning("[FMDebugMenu] TabletFMController not found");
         }
     }
 
@@ -345,13 +364,11 @@ public class FMDebugMenuController : MonoBehaviour
         {
             brokerAddressInput.value = MQTTManager.Instance.BrokerAddress;
             brokerPortInput.value = MQTTManager.Instance.BrokerPort.ToString();
-            stationIdInput.value = MQTTManager.Instance.StationId.ToString();
         }
         else
         {
             brokerAddressInput.value = PlayerPrefs.GetString("MQTT_BrokerAddress", "localhost");
             brokerPortInput.value = PlayerPrefs.GetInt("MQTT_BrokerPort", 1883).ToString();
-            stationIdInput.value = PlayerPrefs.GetInt("MQTT_StationId", 1).ToString();
         }
 
         if (usernameInput != null) usernameInput.value = PlayerPrefs.GetString("MQTT_Username", "");
@@ -364,8 +381,6 @@ public class FMDebugMenuController : MonoBehaviour
             PlayerPrefs.SetString("MQTT_BrokerAddress", brokerAddressInput.value);
         if (brokerPortInput != null && int.TryParse(brokerPortInput.value, out int port))
             PlayerPrefs.SetInt("MQTT_BrokerPort", port);
-        if (stationIdInput != null && int.TryParse(stationIdInput.value, out int stationId))
-            PlayerPrefs.SetInt("MQTT_StationId", stationId);
         if (usernameInput != null)
             PlayerPrefs.SetString("MQTT_Username", usernameInput.value);
         if (passwordInput != null)

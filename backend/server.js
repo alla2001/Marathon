@@ -749,8 +749,6 @@ function setupGracefulShutdown() {
 const http = require('http');
 const DASHBOARD_PORT = 3000;
 
-let sseClients = [];
-
 function getDashboardHTML() {
   return `<!DOCTYPE html>
 <html lang="en">
@@ -859,7 +857,7 @@ function getDashboardHTML() {
       </tr>
     </thead>
     <tbody id="tableBody">
-      <tr><td colspan="7" class="empty">Connecting...</td></tr>
+      <tr><td colspan="7" class="empty">Loading...</td></tr>
     </tbody>
   </table>
 </div>
@@ -868,7 +866,6 @@ function getDashboardHTML() {
 let currentMode = 'rowing';
 let leaderboardData = { rowing: [], running: [], cycling: [] };
 let allData = { rowing: [], running: [], cycling: [] };
-let stats = {};
 let showAll = false;
 
 function switchTab(mode) {
@@ -889,12 +886,12 @@ function renderTable() {
     tbody.innerHTML = '<tr><td colspan="7" class="empty">No entries yet</td></tr>';
     return;
   }
-  tbody.innerHTML = data.map((e, i) => {
-    const rank = e.rank || i + 1;
-    const rankClass = rank <= 3 ? ' rank-' + rank : '';
-    const dist = typeof e.distance === 'number' ? (e.distance / 1000).toFixed(2) + ' km' : '-';
-    const time = typeof e.time === 'number' ? formatTime(e.time) : '-';
-    const date = e.createdAt ? new Date(e.createdAt).toLocaleDateString() : '-';
+  tbody.innerHTML = data.map(function(e, i) {
+    var rank = e.rank || i + 1;
+    var rankClass = rank <= 3 ? ' rank-' + rank : '';
+    var dist = typeof e.distance === 'number' ? (e.distance / 1000).toFixed(2) + ' km' : '-';
+    var time = typeof e.time === 'number' ? formatTime(e.time) : '-';
+    var date = e.createdAt ? new Date(e.createdAt).toLocaleDateString() : '-';
     return '<tr>' +
       '<td class="rank' + rankClass + '">#' + rank + '</td>' +
       '<td class="username">' + escHtml(e.username) + '</td>' +
@@ -902,80 +899,94 @@ function renderTable() {
       '<td class="distance">' + dist + '</td>' +
       '<td class="time-col">' + time + '</td>' +
       '<td class="date-col">' + date + '</td>' +
-      '<td><button class="del-btn" onclick="confirmAction(\'delete\',\'' + escAttr(e.username) + '\')">Delete</button></td>' +
+      '<td><button class="del-btn" onclick="confirmAction(' + "'delete','" + escAttr(e.username) + "'" + ')">Delete</button></td>' +
       '</tr>';
   }).join('');
 }
 
 function formatTime(s) {
-  const m = Math.floor(s / 60);
-  const sec = Math.floor(s % 60);
+  var m = Math.floor(s / 60);
+  var sec = Math.floor(s % 60);
   return m + ':' + (sec < 10 ? '0' : '') + sec;
 }
 
-function escHtml(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
-function escAttr(s) { return s.replace(/'/g, "\\\\'").replace(/"/g, '&quot;'); }
+function escHtml(s) { var d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+function escAttr(s) { return s.replace(/&/g,'&amp;').replace(/'/g,'&#39;').replace(/"/g,'&quot;'); }
 
 function showToast(msg, type) {
-  const t = document.getElementById('toast');
+  var t = document.getElementById('toast');
   t.textContent = msg;
   t.className = 'toast show ' + type;
-  setTimeout(() => t.className = 'toast', 2500);
+  setTimeout(function() { t.className = 'toast'; }, 2500);
 }
 
 function confirmAction(action, username) {
-  let title, desc;
+  var title, desc;
   if (action === 'clear-all') { title = 'Clear All Modes'; desc = 'This will permanently delete ALL entries across rowing, running, and cycling.'; }
   else if (action === 'clear-mode') { title = 'Clear ' + currentMode.charAt(0).toUpperCase() + currentMode.slice(1); desc = 'This will delete all entries in the ' + currentMode + ' leaderboard.'; }
   else if (action === 'delete') { title = 'Delete Entry'; desc = 'Delete entry for "' + username + '" from ' + currentMode + '?'; }
-  const overlay = document.createElement('div');
+  var overlay = document.createElement('div');
   overlay.className = 'confirm-overlay';
-  overlay.innerHTML = '<div class="confirm-box"><h3>' + title + '</h3><p>' + desc + '</p><div class="btns"><button class="btn btn-cancel" onclick="this.closest(\\'.confirm-overlay\\').remove()">Cancel</button><button class="btn btn-confirm" id="cfmBtn">Confirm</button></div></div>';
-  document.body.appendChild(overlay);
-  overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
-  document.getElementById('cfmBtn').onclick = () => {
+  var box = document.createElement('div');
+  box.className = 'confirm-box';
+  box.innerHTML = '<h3>' + title + '</h3><p>' + desc + '</p><div class="btns"></div>';
+  var btns = box.querySelector('.btns');
+  var cancelBtn = document.createElement('button');
+  cancelBtn.className = 'btn btn-cancel';
+  cancelBtn.textContent = 'Cancel';
+  cancelBtn.onclick = function() { overlay.remove(); };
+  var confirmBtn = document.createElement('button');
+  confirmBtn.className = 'btn btn-confirm';
+  confirmBtn.textContent = 'Confirm';
+  confirmBtn.onclick = function() {
     overlay.remove();
     if (action === 'clear-all') clearAll();
     else if (action === 'clear-mode') clearMode(currentMode);
     else if (action === 'delete') deleteEntry(currentMode, username);
   };
+  btns.appendChild(cancelBtn);
+  btns.appendChild(confirmBtn);
+  box.querySelector('.btns').replaceWith(btns);
+  overlay.appendChild(box);
+  overlay.addEventListener('click', function(e) { if (e.target === overlay) overlay.remove(); });
+  document.body.appendChild(overlay);
 }
 
 async function clearAll() {
-  try { const r = await fetch('/api/clear', { method: 'POST' }); const j = await r.json(); showToast(j.message || 'Cleared', 'success'); } catch(e) { showToast('Error: ' + e.message, 'error'); }
+  try { var r = await fetch('/api/clear', { method: 'POST' }); var j = await r.json(); showToast(j.message || 'Cleared', 'success'); poll(); } catch(e) { showToast('Error: ' + e.message, 'error'); }
 }
 async function clearMode(mode) {
-  try { const r = await fetch('/api/clear/' + mode, { method: 'POST' }); const j = await r.json(); showToast(j.message || 'Cleared', 'success'); } catch(e) { showToast('Error: ' + e.message, 'error'); }
+  try { var r = await fetch('/api/clear/' + mode, { method: 'POST' }); var j = await r.json(); showToast(j.message || 'Cleared', 'success'); poll(); } catch(e) { showToast('Error: ' + e.message, 'error'); }
 }
 async function deleteEntry(mode, username) {
-  try { const r = await fetch('/api/delete/' + mode + '/' + encodeURIComponent(username), { method: 'POST' }); const j = await r.json(); showToast(j.message || 'Deleted', 'success'); } catch(e) { showToast('Error: ' + e.message, 'error'); }
+  try { var r = await fetch('/api/delete/' + mode + '/' + encodeURIComponent(username), { method: 'POST' }); var j = await r.json(); showToast(j.message || 'Deleted', 'success'); poll(); } catch(e) { showToast('Error: ' + e.message, 'error'); }
 }
 
-// SSE
-const evtSource = new EventSource('/events');
-evtSource.onmessage = function(event) {
-  const data = JSON.parse(event.data);
-  if (data.mqtt !== undefined) {
-    const badge = document.getElementById('mqttStatus');
+async function poll() {
+  try {
+    var r = await fetch('/api/data');
+    var data = await r.json();
+    var badge = document.getElementById('mqttStatus');
     badge.textContent = data.mqtt ? 'MQTT Connected' : 'MQTT Disconnected';
     badge.className = 'mqtt-badge ' + (data.mqtt ? 'connected' : 'disconnected');
+    if (data.leaderboards) leaderboardData = data.leaderboards;
+    if (data.allEntries) allData = data.allEntries;
+    if (data.stats) {
+      document.getElementById('totalEntries').textContent = data.stats.totalEntries || 0;
+      document.getElementById('rowingEntries').textContent = data.stats.rowingEntries || 0;
+      document.getElementById('runningEntries').textContent = data.stats.runningEntries || 0;
+      document.getElementById('cyclingEntries').textContent = data.stats.cyclingEntries || 0;
+      document.getElementById('totalDistance').innerHTML = (data.stats.totalDistanceKm || '0') + ' <small>km</small>';
+    }
+    renderTable();
+  } catch(e) {
+    document.getElementById('mqttStatus').textContent = 'Dashboard Error';
+    document.getElementById('mqttStatus').className = 'mqtt-badge disconnected';
   }
-  if (data.leaderboards) leaderboardData = data.leaderboards;
-  if (data.allEntries) allData = data.allEntries;
-  if (data.stats) {
-    stats = data.stats;
-    document.getElementById('totalEntries').textContent = stats.totalEntries || 0;
-    document.getElementById('rowingEntries').textContent = stats.rowingEntries || 0;
-    document.getElementById('runningEntries').textContent = stats.runningEntries || 0;
-    document.getElementById('cyclingEntries').textContent = stats.cyclingEntries || 0;
-    document.getElementById('totalDistance').innerHTML = (stats.totalDistanceKm || '0') + ' <small>km</small>';
-  }
-  renderTable();
-};
-evtSource.onerror = function() {
-  document.getElementById('mqttStatus').textContent = 'Dashboard Disconnected';
-  document.getElementById('mqttStatus').className = 'mqtt-badge disconnected';
-};
+}
+
+poll();
+setInterval(poll, 2000);
 </script>
 </body>
 </html>`;
@@ -995,8 +1006,8 @@ function getAllEntriesSorted(mode) {
     }));
 }
 
-function getSSEData() {
-  return JSON.stringify({
+function getDashboardData() {
+  return {
     mqtt: mqttClient && mqttClient.connected,
     leaderboards: getAllTop10(),
     allEntries: {
@@ -1011,39 +1022,20 @@ function getSSEData() {
       cyclingEntries: (database.cycling || []).length,
       totalDistanceKm: getAllTotalDistances().totalKm
     }
-  });
-}
-
-function sendSSEUpdate() {
-  const data = getSSEData();
-  sseClients = sseClients.filter(res => {
-    try { res.write('data: ' + data + '\n\n'); return true; } catch(e) { return false; }
-  });
+  };
 }
 
 function startDashboardServer() {
   const server = http.createServer((req, res) => {
-    // CORS headers
     res.setHeader('Access-Control-Allow-Origin', '*');
 
     if (req.method === 'GET' && req.url === '/') {
       res.writeHead(200, { 'Content-Type': 'text/html' });
       res.end(getDashboardHTML());
     }
-    else if (req.method === 'GET' && req.url === '/events') {
-      res.writeHead(200, {
-        'Content-Type': 'text/event-stream',
-        'Cache-Control': 'no-cache',
-        'Connection': 'keep-alive',
-        'X-Accel-Buffering': 'no'
-      });
-      res.flushHeaders();
-      req.socket.setNoDelay(true);
-      // Send initial data directly to this client
-      const initData = getSSEData();
-      res.write('data: ' + initData + '\n\n');
-      sseClients.push(res);
-      req.on('close', () => { sseClients = sseClients.filter(c => c !== res); });
+    else if (req.method === 'GET' && req.url === '/api/data') {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(getDashboardData()));
     }
     else if (req.method === 'POST' && req.url === '/api/clear') {
       database.rowing = [];
@@ -1053,7 +1045,6 @@ function startDashboardServer() {
       console.log('[Dashboard] Cleared ALL leaderboards');
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ success: true, message: 'All leaderboards cleared' }));
-      sendSSEUpdate();
     }
     else if (req.method === 'POST' && req.url.startsWith('/api/clear/')) {
       const mode = req.url.split('/api/clear/')[1];
@@ -1063,7 +1054,6 @@ function startDashboardServer() {
         console.log('[Dashboard] Cleared ' + mode + ' leaderboard');
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ success: true, message: mode + ' leaderboard cleared' }));
-        sendSSEUpdate();
       } else {
         res.writeHead(400, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ success: false, error: 'Invalid mode: ' + mode }));
@@ -1085,7 +1075,6 @@ function startDashboardServer() {
         console.log('[Dashboard] Deleted entry "' + username + '" from ' + mode);
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ success: true, message: 'Deleted "' + username + '" from ' + mode }));
-        sendSSEUpdate();
       } else {
         res.writeHead(404, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ success: false, error: 'Entry not found' }));
@@ -1100,9 +1089,6 @@ function startDashboardServer() {
   server.listen(DASHBOARD_PORT, () => {
     console.log('[Dashboard] Running at http://localhost:' + DASHBOARD_PORT);
   });
-
-  // Send SSE updates every 5s
-  setInterval(sendSSEUpdate, 5000);
 }
 
 // ============================================

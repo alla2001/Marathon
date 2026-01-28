@@ -573,11 +573,11 @@ function getAllEntriesSorted() {
     }));
 }
 
-function sendSSEUpdate() {
+function getSSEData() {
   const totalDist = getTotalDistances();
   const sorted = getAllEntriesSorted();
   const topScore = sorted.length > 0 ? sorted[0].score : 0;
-  const data = JSON.stringify({
+  return JSON.stringify({
     mqtt: mqttClient && mqttClient.connected,
     top10: sorted.slice(0, 10),
     allEntries: sorted,
@@ -587,6 +587,10 @@ function sendSSEUpdate() {
       topScore: topScore
     }
   });
+}
+
+function sendSSEUpdate() {
+  const data = getSSEData();
   sseClients = sseClients.filter(res => {
     try { res.write('data: ' + data + '\n\n'); return true; } catch(e) { return false; }
   });
@@ -604,10 +608,15 @@ function startDashboardServer() {
       res.writeHead(200, {
         'Content-Type': 'text/event-stream',
         'Cache-Control': 'no-cache',
-        'Connection': 'keep-alive'
+        'Connection': 'keep-alive',
+        'X-Accel-Buffering': 'no'
       });
+      res.flushHeaders();
+      req.socket.setNoDelay(true);
+      // Send initial data directly to this client
+      const initData = getSSEData();
+      res.write('data: ' + initData + '\n\n');
       sseClients.push(res);
-      sendSSEUpdate();
       req.on('close', () => { sseClients = sseClients.filter(c => c !== res); });
     }
     else if (req.method === 'POST' && req.url === '/api/clear') {

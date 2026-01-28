@@ -133,10 +133,47 @@ function updateEntry(gameMode, username, updates) {
   return null;
 }
 
+// Calculate score from distance and time
+// Formula: score = distance * (timeLimit / time)
+// More distance + less time = higher score
+function calculateScore(distance, time, gameMode) {
+  const modeConfig = gameConfig.gameModes && gameConfig.gameModes[gameMode];
+  const timeLimit = modeConfig ? modeConfig.timeLimit : 60;
+  // Prevent division by zero, minimum time is 1 second
+  const effectiveTime = Math.max(time || 1, 1);
+  // Score = distance * time multiplier (faster = higher multiplier)
+  const score = Math.round(distance * (timeLimit / effectiveTime));
+  return score;
+}
+
+// Recalculate all scores in database using current config
+function recalculateAllScores() {
+  let updated = 0;
+  GAME_MODES.forEach(mode => {
+    const entries = database[mode] || [];
+    entries.forEach(entry => {
+      const newScore = calculateScore(entry.distance || 0, entry.time || 1, mode);
+      if (entry.score !== newScore) {
+        entry.score = newScore;
+        updated++;
+      }
+    });
+  });
+  if (updated > 0) {
+    saveDatabase();
+    console.log(`[DB] Recalculated ${updated} scores using current config`);
+  }
+}
+
 function getTop10(gameMode) {
   const entries = database[gameMode] || [];
   return [...entries]
-    .sort((a, b) => b.score - a.score)
+    .sort((a, b) => {
+      // Primary: higher score wins
+      if (b.score !== a.score) return b.score - a.score;
+      // Tie-breaker: shorter time wins
+      return (a.time || 9999) - (b.time || 9999);
+    })
     .slice(0, 10)
     .map((entry, index) => ({
       rank: index + 1,
@@ -227,6 +264,9 @@ function setupConfigWatcher() {
         console.log('[Config] config.json changed, reloading...');
         const oldConfig = gameConfig;
         loadGameConfig();
+
+        // Recalculate all scores with new config (timeLimit may have changed)
+        recalculateAllScores();
 
         // Broadcast new config immediately if connected
         if (mqttClient && mqttClient.connected) {
@@ -390,16 +430,16 @@ function handleMessage(topic, message) {
 // Submit Score Handler
 // ============================================
 function handleSubmit(payload) {
-  const { username, score, distance, time, stationId, gameMode } = payload;
+  const { username, distance, time, stationId, gameMode } = payload;
   const responseTopic = getResponseTopic(TOPICS.SUBMIT_RESPONSE, stationId);
 
   // Default to 'rowing' if no game mode specified
   const mode = (gameMode || 'rowing').toLowerCase();
 
-  if (!username || score === undefined) {
+  if (!username || distance === undefined) {
     publishResponse(responseTopic, {
       success: false,
-      error: 'Missing required fields: username and score',
+      error: 'Missing required fields: username and distance',
       stationId
     });
     return;
@@ -414,37 +454,40 @@ function handleSubmit(payload) {
     return;
   }
 
+  // Calculate score server-side: score = distance * (timeLimit / time)
+  const calculatedScore = calculateScore(distance || 0, time || 1, mode);
+
   try {
     // Check if user exists in this game mode's leaderboard
     let entry = findEntryByUsername(mode, username);
 
     if (entry) {
       // Update only if new score is higher
-      if (score > entry.score) {
+      if (calculatedScore > entry.score) {
         updateEntry(mode, username, {
-          score,
+          score: calculatedScore,
           distance: distance || entry.distance,
           time: time || entry.time,
           stationId: stationId || entry.stationId
         });
 
-        console.log(`[DB] Updated ${mode} score for ${username}: ${score}`);
+        console.log(`[DB] Updated ${mode} score for ${username}: ${calculatedScore} (dist=${distance}, time=${time})`);
         publishResponse(responseTopic, {
           success: true,
           message: 'Score updated (new high score)',
           username,
-          score,
+          score: calculatedScore,
           gameMode: mode,
           stationId
         });
       } else {
-        console.log(`[DB] Score not updated for ${username} in ${mode} (not a high score)`);
+        console.log(`[DB] Score not updated for ${username} in ${mode} (${calculatedScore} <= ${entry.score})`);
         publishResponse(responseTopic, {
           success: true,
           message: 'Score not updated (not higher than current)',
           username,
           currentScore: entry.score,
-          submittedScore: score,
+          submittedScore: calculatedScore,
           gameMode: mode,
           stationId
         });
@@ -453,18 +496,18 @@ function handleSubmit(payload) {
       // Create new entry
       addEntry(mode, {
         username,
-        score,
+        score: calculatedScore,
         distance: distance || 0,
         time: time || 0,
         stationId: stationId || 0
       });
 
-      console.log(`[DB] New ${mode} entry created for ${username}: ${score}`);
+      console.log(`[DB] New ${mode} entry created for ${username}: ${calculatedScore} (dist=${distance}, time=${time})`);
       publishResponse(responseTopic, {
         success: true,
         message: 'New entry created',
         username,
-        score,
+        score: calculatedScore,
         gameMode: mode,
         stationId
       });
@@ -1119,7 +1162,12 @@ setInterval(poll, 2000);
 function getAllEntriesSorted(mode) {
   const entries = database[mode] || [];
   return [...entries]
-    .sort((a, b) => b.score - a.score)
+    .sort((a, b) => {
+      // Primary: higher score wins
+      if (b.score !== a.score) return b.score - a.score;
+      // Tie-breaker: shorter time wins
+      return (a.time || 9999) - (b.time || 9999);
+    })
     .map((entry, index) => ({
       rank: index + 1,
       username: entry.username,
@@ -1257,6 +1305,9 @@ function main() {
 
   // Load JSON database
   loadDatabase();
+
+  // Recalculate all scores using current config (distance * timeLimit / time)
+  recalculateAllScores();
 
   setupGracefulShutdown();
   connectMQTT();
